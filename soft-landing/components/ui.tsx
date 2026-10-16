@@ -14,7 +14,7 @@ export function Button({ variant = "primary", className, ...props }: ButtonProps
       className={cx(
         "inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         variant === "primary" &&
-          "bg-primary text-white hover:bg-indigo-600 shadow-sm",
+          "bg-primary text-white hover:bg-primary-hover shadow-sm",
         variant === "secondary" &&
           "border border-border bg-card text-foreground hover:bg-muted",
         variant === "ghost" && "text-foreground hover:bg-muted",
@@ -56,7 +56,7 @@ export function Badge({
         tone === "good" && "bg-emerald-50 text-emerald-700",
         tone === "ok" && "bg-amber-50 text-amber-700",
         tone === "risky" && "bg-red-50 text-red-700",
-        tone === "accent" && "bg-indigo-50 text-indigo-700",
+        tone === "accent" && "bg-orange-50 text-orange-800",
         className
       )}
       {...props}

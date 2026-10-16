@@ -1,149 +1,263 @@
+"use client";
+
 import Link from "next/link";
-import {
-  ArrowRight,
-  CalendarCheck2,
-  CloudSun,
-  ListChecks,
-  PackageCheck,
-  PlayCircle,
-} from "lucide-react";
+import { useRouter } from "next/navigation";
+import * as React from "react";
+import { ArrowRight, Lock, ReceiptText, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui";
+import { AddressInput, type AddressChoice } from "./onboarding/AddressInput";
+import { HOME_SIZES, type HomeSize } from "@/lib/pricing";
+import { SERVICE_LABELS, type MoverService } from "@/lib/movers";
+
+const SERVICE_KEYS = Object.keys(SERVICE_LABELS) as MoverService[];
 
 const stats = [
+  { value: "1 in 3", label: "movers say the final bill came in above the quote" },
+  { value: "+23%", label: "typical gap between the phone quote and the invoice" },
+  { value: "€0", label: "charged for comparing — operators pay us, never you" },
+];
+
+const principles = [
   {
-    value: "88%",
-    label: "of Finns say moving causes negative stress",
+    icon: Lock,
+    title: "The price you book is the price you pay",
+    detail:
+      "Every listed operator commits to a fixed total before your card is touched. No overtime surprises, no 'the stairs were harder than expected'.",
   },
   {
-    value: "52%",
-    label: "rank moving-day stress 8 or higher, out of 10",
+    icon: ReceiptText,
+    title: "Every euro has a line item",
+    detail:
+      "Labour, kilometres, packing, weekend factors — shown side by side, priced by the same open formula. If you can't see it, we don't list it.",
   },
   {
-    value: "19%",
-    label: "arrive with something broken or missing — sofas most of all",
+    icon: ShieldCheck,
+    title: "Covered when things break anyway",
+    detail:
+      "Each operator's damage rate and cover limit is public. Anything their policy leaves open, an If top-up covers in one click — priced before you book.",
   },
 ];
 
-const steps = [
-  {
-    icon: CloudSun,
-    title: "Pick a safe day",
-    detail:
-      "We check the forecast for your route and flag icy, windy, or wet days before you book the van.",
-  },
-  {
-    icon: ListChecks,
-    title: "Everything on one list",
-    detail:
-      "Address changes, utilities, packing order — a calm checklist that paces itself around your date.",
-  },
-  {
-    icon: PackageCheck,
-    title: "You're all set",
-    detail:
-      "Move with a plan instead of a panic. Boxes labelled, floors protected, nothing left behind.",
-  },
-];
+function toLocalDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export default function Home() {
+  const router = useRouter();
+
+  const [from, setFrom] = React.useState<AddressChoice | null>(null);
+  const [to, setTo] = React.useState<AddressChoice | null>(null);
+  const [moveDate, setMoveDate] = React.useState("");
+  const [minDate, setMinDate] = React.useState("");
+  const [homeSize, setHomeSize] = React.useState<HomeSize | "">("");
+  const [services, setServices] = React.useState<MoverService[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setMinDate(toLocalDate(new Date()));
+    const nextSaturday = new Date();
+    const diff = (6 - new Date().getDay() + 7) % 7;
+    nextSaturday.setDate(new Date().getDate() + (diff === 0 ? 7 : diff));
+    setMoveDate(toLocalDate(nextSaturday));
+  }, []);
+
+  function toggleService(s: MoverService) {
+    setServices((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  }
+
+  function search() {
+    if (!from || !to) return setError("Pick both addresses so we can price the van leg.");
+    if (!moveDate || !homeSize) return setError("Pick a date and your home size.");
+    setError(null);
+    const params = new URLSearchParams({
+      fromName: from.name,
+      fromLat: String(from.latitude),
+      fromLon: String(from.longitude),
+      toName: to.name,
+      toLat: String(to.latitude),
+      toLon: String(to.longitude),
+      date: moveDate,
+      size: homeSize,
+      services: services.join(","),
+    });
+    router.push(`/search?${params.toString()}`);
+  }
+
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="mx-auto flex max-w-3xl flex-col items-center px-6 pt-20 pb-14 text-center sm:pt-28">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-text-muted">
-            <CalendarCheck2 className="h-3.5 w-3.5 text-primary" aria-hidden />
-            Your moving-day copilot
+      {/* Masthead */}
+      <header className="border-b border-border">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
+          <span className="font-display text-lg font-semibold tracking-tight">
+            Soft Landing
           </span>
-
-          <h1 className="mt-6 font-display text-4xl leading-tight tracking-tight text-foreground sm:text-6xl">
-            A soft landing for
-            <br />
-            moving day.
-          </h1>
-
-          <p className="mt-5 max-w-xl text-base leading-relaxed text-text-muted sm:text-lg">
-            Soft Landing picks a safe day, builds the checklist, and keeps the
-            chaos out of your move — so you can look forward to the new home
-            instead of dreading the drive.
-          </p>
-
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-600"
-            >
-              Plan my move
-              <ArrowRight className="h-4 w-4" aria-hidden />
+          <nav className="flex items-center gap-6 text-sm">
+            <Link href="/plan/demo" className="text-text-muted transition-colors hover:text-foreground">
+              Your move checklist
             </Link>
-            <Link
-              href="/plan/demo"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <PlayCircle className="h-4 w-4 text-primary" aria-hidden />
-              See a demo plan
-            </Link>
-          </div>
+          </nav>
+        </div>
+      </header>
 
-          <p className="mt-4 text-xs text-text-muted">
-            Short on time?{" "}
-            <Link
-              href="/plan/demo"
-              className="font-medium text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
-            >
-              Jump straight into a demo plan →
-            </Link>
-          </p>
-        </section>
+      <main className="flex-1">
+        {/* Hero + search */}
+        <section className="border-b border-border bg-card">
+          <div className="mx-auto w-full max-w-6xl px-6 pb-10 pt-16">
+            <p className="kicker">The moving marketplace · Finland</p>
+            <h1 className="mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+              Compare house movers.
+              <br />
+              Lock the price. Move on the right day.
+            </h1>
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-muted">
+              One search across every operator we vet: side-by-side fixed prices, open
+              line items, damage rates — and a forecast so you never carry a sofa on
+              the iciest day of the year.
+            </p>
 
-        {/* Stats */}
-        <section className="mx-auto w-full max-w-4xl px-6 pb-16" aria-label="Why this matters">
-          <div className="grid gap-4 sm:grid-cols-3">
-            {stats.map((s) => (
-              <div
-                key={s.value}
-                className="rounded-xl border border-border bg-card px-6 py-5 text-center shadow-sm"
-              >
-                <div className="font-display text-3xl font-semibold text-primary">
-                  {s.value}
-                </div>
-                <div className="mt-2 text-sm leading-snug text-text-muted">{s.label}</div>
+            {/* Search panel */}
+            <div className="mt-10 rounded-lg border border-border bg-background p-6 shadow-sm">
+              <div className="grid gap-5 md:grid-cols-2">
+                <AddressInput
+                  id="from"
+                  label="Moving from"
+                  placeholder="City or address — e.g. Helsinki"
+                  value={from}
+                  onChange={setFrom}
+                />
+                <AddressInput
+                  id="to"
+                  label="Moving to"
+                  placeholder="City or address — e.g. Tampere"
+                  value={to}
+                  onChange={setTo}
+                />
               </div>
-            ))}
+              <div className="mt-5 grid gap-5 sm:grid-cols-2">
+                <label className="block">
+                  <span className="kicker">Move date</span>
+                  <input
+                    type="date"
+                    min={minDate}
+                    value={moveDate}
+                    onChange={(e) => setMoveDate(e.target.value)}
+                    className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+                <label className="block">
+                  <span className="kicker">Home size</span>
+                  <select
+                    value={homeSize}
+                    onChange={(e) => setHomeSize(e.target.value as HomeSize)}
+                    className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="" disabled>
+                      Select size
+                    </option>
+                    {HOME_SIZES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-5">
+                <span className="kicker">Extras</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {SERVICE_KEYS.map((s) => {
+                    const active = services.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggleService(s)}
+                        className={
+                          "rounded-md border px-3 py-1.5 text-sm transition-colors " +
+                          (active
+                            ? "border-primary bg-primary text-white"
+                            : "border-border bg-card text-foreground hover:border-text-muted")
+                        }
+                      >
+                        {SERVICE_LABELS[s]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-4">
+                <Button onClick={search} className="px-6">
+                  Compare movers
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+                {error && <p className="text-sm text-red-700">{error}</p>}
+              </div>
+            </div>
+
+            {/* Stats */}
+            <dl className="mt-12 grid grid-cols-1 gap-x-10 gap-y-6 border-t border-border pt-8 sm:grid-cols-3">
+              {stats.map((s) => (
+                <div key={s.value}>
+                  <dt className="kicker">{s.label}</dt>
+                  <dd className="tnum mt-1 font-display text-3xl font-semibold text-accent">
+                    {s.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </section>
 
-        {/* How it works */}
-        <section className="mx-auto w-full max-w-4xl px-6 pb-20" aria-label="How it works">
-          <h2 className="text-center font-display text-2xl tracking-tight text-foreground">
-            How it works
+        {/* Principles */}
+        <section className="mx-auto w-full max-w-6xl px-6 py-16">
+          <h2 className="font-display text-2xl font-semibold tracking-tight">
+            Why the price can’t jump on you here
           </h2>
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {steps.map((step, i) => (
-              <div
-                key={step.title}
-                className="rounded-xl border border-border bg-card p-6 shadow-sm"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
-                  <step.icon className="h-5 w-5 text-primary" aria-hidden />
+          <div className="mt-8 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
+            {principles.map((p, i) => (
+              <div key={p.title} className="bg-card p-6">
+                <div className="flex items-center gap-3">
+                  <p.icon className="h-5 w-5 text-accent" />
+                  <span className="kicker">0{i + 1}</span>
                 </div>
-                <h3 className="mt-4 font-display text-lg font-semibold text-foreground">
-                  {step.title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-text-muted">{step.detail}</p>
-                <div className="mt-4 text-xs font-medium text-text-muted">
-                  Step {i + 1} of {steps.length}
-                </div>
+                <h3 className="mt-4 text-base font-semibold leading-snug">{p.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-text-muted">{p.detail}</p>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* Post-booking tie-in */}
+        <section className="border-t border-border bg-card">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-10 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-display text-xl font-semibold tracking-tight">
+                Booked? The rest of the move lives in one checklist.
+              </h2>
+              <p className="mt-1 text-sm text-text-muted">
+                Address changes, utilities, insurance transfers — paced around your date.
+              </p>
+            </div>
+            <Link
+              href="/plan/demo"
+              className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-accent hover:underline"
+            >
+              Open the checklist
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </section>
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-4xl flex-col items-center gap-1 px-6 py-6 text-center">
-          <p className="text-xs text-text-muted">
-            Made with If — home insurance that moves with you.
-          </p>
+        <div className="mx-auto w-full max-w-6xl px-6 py-6 text-xs text-text-muted">
+          Hackathon mockup. Operators, prices and statistics are illustrative; weather
+          data is live from Open-Meteo.
         </div>
       </footer>
     </div>

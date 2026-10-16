@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f5f5f0;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --primary: #4f46e5;
-  --accent: #10b981;
-  --muted: #f4f4f5;
-  --border: #e4e4e7;
-  --text-muted: #6b7280;
-  --radius: 0.75rem;
+  --background: #f6f4ef;
+  --foreground: #1c1917;
+  --card: #fffefb;
+  --primary: #1c1917;
+  --primary-hover: #44403c;
+  --accent: #c2410c;
+  --muted: #edeae2;
+  --border: #e2ddd2;
+  --text-muted: #78716c;
+  --radius: 0.375rem;
 }
 
 @theme inline {
@@ -22,7 +23,7 @@
   --color-border: var(--border);
   --color-text-muted: var(--text-muted);
   --radius-lg: var(--radius);
-  --font-sans: var(--font-dm-sans);
+  --font-sans: var(--font-inter);
   --font-display: var(--font-lora);
 }
 
@@ -30,4 +31,23 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+}
+
+/* Display serif for editorial headlines */
+.font-display {
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+/* Prices and metrics: tabular, no jitter while comparing */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Uppercase micro-label used for section kickers and table headers */
+.kicker {
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
 }
