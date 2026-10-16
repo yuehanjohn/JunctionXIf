@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { fetchWeatherDays } from "@/lib/weather";
+import { fetchWeatherBundle } from "@/lib/weather";
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -13,8 +13,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const days_ = await fetchWeatherDays(lat, lon, days);
-    return NextResponse.json({ ok: true, days: days_ });
+    const bundle = await fetchWeatherBundle(lat, lon, days);
+    return NextResponse.json({
+      ok: true,
+      days: bundle.days,
+      hourly: { hours: bundle.hours, windows: bundle.windows },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to reach weather service";
     return NextResponse.json({ ok: false, error: message }, { status: 502 });

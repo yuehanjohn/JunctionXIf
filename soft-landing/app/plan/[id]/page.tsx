@@ -14,58 +14,19 @@ import {
   Wind,
 } from "lucide-react";
 import { Badge, Button, Card, CardTitle, cx } from "@/components/ui";
-import { labelForScore, scoreWeatherDay } from "@/lib/scoring";
-import { getPlan } from "@/lib/store";
-import type { WeatherDay } from "@/lib/types";
+import { ensureSeededPlan, getPlan, type PlanSeed } from "@/lib/store";
+import { fetchWeatherBundle, type WeatherBundle } from "@/lib/weather";
+import type { WeatherHour } from "@/lib/types";
 import { PlanTasks } from "./plan-tasks";
 
 // Reads the in-memory plan store + live weather per request.
 export const instant = false;
 
-type OpenMeteoDaily = {
-  time?: string[];
-  temperature_2m_max?: number[];
-  temperature_2m_min?: number[];
-  precipitation_sum?: number[];
-  snowfall_sum?: number[];
-  wind_gusts_10m_max?: number[];
-};
+const fmtHour = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
-// Same Open-Meteo request shape as GET /api/weather, reused server-side so the
-// dashboard renders with fresh data instead of fetching its own API route.
-async function fetchWeatherDays(
-  lat: number,
-  lon: number,
-  days: number
-): Promise<WeatherDay[] | null> {
-  const url = new URL("https://api.open-meteo.com/v1/forecast");
-  url.searchParams.set("latitude", String(lat));
-  url.searchParams.set("longitude", String(lon));
-  url.searchParams.set(
-    "daily",
-    "temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum,wind_gusts_10m_max"
-  );
-  url.searchParams.set("forecast_days", String(days));
-  url.searchParams.set("timezone", "Europe/Helsinki");
-
-  try {
-    const res = await fetch(url, { next: { revalidate: 900 } });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { daily?: OpenMeteoDaily };
-    const time = data.daily?.time ?? [];
-    if (time.length === 0) return null;
-    return time.map((date, i) => {
-      const tMax = data.daily?.temperature_2m_max?.[i] ?? 0;
-      const tMin = data.daily?.temperature_2m_min?.[i] ?? 0;
-      const precip = data.daily?.precipitation_sum?.[i] ?? 0;
-      const snow = data.daily?.snowfall_sum?.[i] ?? 0;
-      const gust = data.daily?.wind_gusts_10m_max?.[i] ?? 0;
-      const score = scoreWeatherDay({ tMax, tMin, precip, snow, gust });
-      return { date, tMax, tMin, precip, snow, gust, score, label: labelForScore(score) };
-    });
-  } catch {
-    return null;
-  }
+// Same tone classes as the score dots on the search results.
+function hourTone(label: WeatherHour["label"]) {
+  return label === "good" ? "bg-emerald-600" : label === "ok" ? "bg-amber-500" : "bg-red-600";
 }
 
 function formatDay(dateStr: string, opts?: Intl.DateTimeFormatOptions): string {
@@ -81,7 +42,7 @@ function EmptyPlan() {
       <Card className="p-10 text-center">
         <PackageOpen className="mx-auto h-10 w-10 text-text-muted" strokeWidth={1.5} />
         <h1 className="mt-4 font-display text-2xl font-semibold text-foreground">
-          We couldn't find that moving plan
+          We couldn’t find that moving plan
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-text-muted">
           The link may be off by a character, or the plan has moved on. Starting a
@@ -96,18 +57,56 @@ function EmptyPlan() {
   );
 }
 
+type PlanSearchParams = Record<string, string | string[] | undefined>;
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// "Open the checklist" from the search results links to /plan/s with the search
+// context as query params; the plan is then created (idempotently) from them.
+function seedFromSearchParams(sp: PlanSearchParams): PlanSeed | null {
+  const fromName = firstParam(sp.from);
+  const toName = firstParam(sp.to);
+  const moveDate = firstParam(sp.date);
+  const homeSize = firstParam(sp.size);
+  const fromLat = Number(firstParam(sp.fromLat));
+  const fromLon = Number(firstParam(sp.fromLon));
+  const toLat = Number(firstParam(sp.toLat));
+  const toLon = Number(firstParam(sp.toLon));
+  if (!fromName || !toName || !homeSize || !moveDate || !DATE_PATTERN.test(moveDate)) return null;
+  if (![fromLat, fromLon, toLat, toLon].every(Number.isFinite)) return null;
+  return { fromName, fromLat, fromLon, toName, toLat, toLon, moveDate, homeSize };
+}
+
 export default async function PlanPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<PlanSearchParams>;
 }) {
-  const { id } = await params;
   await connection();
-  const plan = getPlan(id);
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const isDemo = id === "demo";
+  let plan = getPlan(id);
+  if (!plan && id === "s") {
+    const seed = seedFromSearchParams(sp);
+    if (seed) plan = ensureSeededPlan(seed);
+  }
   if (!plan) return <EmptyPlan />;
 
-  const weather = await fetchWeatherDays(plan.toLat, plan.toLon, 7);
-  const bestDay = weather?.reduce((best, day) => (day.score > best.score ? day : best));
+  let bundle: WeatherBundle | null = null;
+  try {
+    bundle = await fetchWeatherBundle(plan.toLat, plan.toLon, 16);
+  } catch {
+    bundle = null; // the checklist works without weather
+  }
+  const weather = bundle?.days ?? null;
+  const weekDays = weather?.slice(0, 7) ?? null; // the grid shows one week
+  const bestDay = weekDays?.reduce((best, day) => (day.score > best.score ? day : best));
   const moveDay = weather?.find((day) => day.date === plan.moveDate) ?? null;
   const riskyMoveDay = moveDay && moveDay.label === "risky" ? moveDay : null;
   const alternativeDay =
@@ -116,11 +115,23 @@ export default async function PlanPage({
           .filter((day) => day.date !== plan.moveDate)
           .reduce((best, day) => (day.score > best.score ? day : best))
       : null;
+  const moveHours =
+    bundle?.hours.filter(
+      (h) => h.time.slice(0, 10) === plan.moveDate && h.hour >= 8 && h.hour <= 20
+    ) ?? [];
+  const moveWindow = bundle?.windows.find((w) => w.date === plan.moveDate) ?? null;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header>
-        <p className="text-sm text-text-muted">Your moving plan</p>
+        <p className="text-sm text-text-muted">{isDemo ? "Example plan" : "Your moving plan"}</p>
+        {isDemo && (
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-muted">
+            This is a filled-in sample so you can see how a plan reads. Run your
+            own search and your checklist will be paced around your real dates
+            and addresses.
+          </p>
+        )}
         <h1 className="mt-1 flex flex-wrap items-center gap-3 font-display text-3xl font-semibold text-foreground">
           {plan.fromName}
           <ArrowRight className="h-6 w-6 text-text-muted" />
@@ -157,10 +168,10 @@ export default async function PlanPage({
               )}
             </div>
 
-            {weather ? (
+            {weekDays ? (
               <>
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-                  {weather.map((day) => (
+                  {weekDays.map((day) => (
                     <div
                       key={day.date}
                       className={cx(
@@ -199,18 +210,72 @@ export default async function PlanPage({
                   ))}
                 </div>
                 <p className="mt-3 text-xs text-text-muted">
-                  {weather.some((day) => day.date === plan.moveDate)
+                  {weekDays.some((day) => day.date === plan.moveDate)
                     ? "Highlighted card is your moving day. "
-                    : "Your moving day is outside the 7-day forecast — check back closer to it. "}
+                    : moveDay
+                      ? "Your moving day is beyond the week above — its hour-by-hour outlook is below. "
+                      : "Your moving day is outside the 16-day forecast — check back closer to it. "}
                   Scores weigh ice, wind and rain — the things that make
                   carrying boxes hard.
                 </p>
+                {moveHours.length > 0 && (
+                  <div className="mt-6 border-t border-border pt-5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <CardTitle>Moving-day hours · 08:00–20:00</CardTitle>
+                      {moveWindow && (
+                        <p className="text-sm text-text-muted">
+                          Best stretch{" "}
+                          <span className="font-medium text-foreground">
+                            {fmtHour(moveWindow.startHour)}–{fmtHour(moveWindow.endHour)}
+                          </span>{" "}
+                          is outlined.
+                        </p>
+                      )}
+                    </div>
+                    <div className="mt-4 flex gap-1.5">
+                      {moveHours.map((h) => {
+                        const inBest =
+                          moveWindow !== null &&
+                          h.hour >= moveWindow.startHour &&
+                          h.hour < moveWindow.endHour;
+                        return (
+                          <div
+                            key={h.time}
+                            title={`${fmtHour(h.hour)} · ${Math.round(h.t)}°C · ${h.precip.toFixed(1)} mm · gusts ${Math.round((h.gust / 3.6) * 10) / 10} m/s`}
+                            className={cx(
+                              "min-w-0 flex-1 rounded-md border px-1 py-1.5 text-center",
+                              inBest ? "border-primary" : "border-border"
+                            )}
+                          >
+                            <span
+                              className={cx("mx-auto block h-2 w-full max-w-6 rounded-full", hourTone(h.label))}
+                            />
+                            <span className="tnum mt-1 block text-[11px] leading-none text-text-muted">
+                              {fmtHour(h.hour)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-3 text-xs text-text-muted">
+                      <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-600" />
+                      dry &amp; calm
+                      <span className="mx-1 inline-block h-2 w-2 rounded-full bg-amber-500" />
+                      usable
+                      <span className="mx-1 inline-block h-2 w-2 rounded-full bg-red-600" />
+                      risky.{" "}
+                      {moveWindow
+                        ? "The outlined stretch is the best ≥3 h window that day."
+                        : "No dry ≥3 h window that day — start in the morning and watch the forecast."}
+                    </p>
+                  </div>
+                )}
               </>
             ) : (
               <p className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-3 text-sm text-text-muted">
                 <CloudOff className="h-4 w-4" />
-                The weather outlook couldn't load just now. It will be back on your
-                next visit — your checklist doesn't depend on it.
+                The weather outlook couldn’t load just now. It will be back on your
+                next visit — your checklist doesn’t depend on it.
               </p>
             )}
           </Card>
@@ -237,7 +302,7 @@ export default async function PlanPage({
                           weekday: "long",
                           day: "numeric",
                           month: "long",
-                        })} looks like the calmest day this week.`
+                        })} looks like the calmest day ahead.`
                       : "laying grit and keeping a thermos of hot drinks goes a long way."}
                   </p>
                 </div>

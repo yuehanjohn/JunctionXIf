@@ -31,6 +31,9 @@ export default function OnboardingPage() {
   // Default to next Saturday (never today); constrain the picker to today onward.
   React.useEffect(() => {
     const now = new Date();
+    // Clock-derived defaults must be set after mount: a lazy initializer would
+    // render a different date on the server (SSR) than on the client.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMinDate(toLocalDate(now));
     const nextSaturday = new Date(now);
     const diff = (6 - now.getDay() + 7) % 7;

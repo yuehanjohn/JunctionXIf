@@ -26,6 +26,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   if (item) item.done = true;
   const postiItem = plan.checklist.find((entry) => entry.id === "posti-forwarding");
   if (postiItem) postiItem.done = true;
+  plan.addressChangeFiledFor = plan.moveDate;
 
   return NextResponse.json({ ok: true, plan: updatePlan(plan), notifications });
 }

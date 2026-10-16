@@ -1,19 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   Check,
   Lock,
-  Minus,
   Star,
   Timer,
   Umbrella,
   X,
 } from "lucide-react";
 import { MOVERS, SERVICE_LABELS, type Mover, type MoverService } from "@/lib/movers";
-import { CONTENTS_VALUE, bestDay, euro, missingServices, quote, type HomeSize, type Quote } from "@/lib/pricing";
+import { CONTENTS_VALUE, TOP_UP, bestDay, euro, euroCents, missingServices, quote, topUpPricing, type HomeSize, type Quote } from "@/lib/pricing";
 import type { WeatherDay } from "@/lib/types";
 
 export type SearchQuery = {
@@ -35,6 +36,7 @@ const SORTS: { key: SortKey; label: string }[] = [
 const fmtDay = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
 const fmtShort = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
 const fmtDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+const fmtHour = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
 function scoreTone(label: WeatherDay["label"]) {
   return label === "good" ? "bg-emerald-600" : label === "ok" ? "bg-amber-500" : "bg-red-600";
@@ -45,9 +47,48 @@ function damageTone(rate: number) {
 }
 
 export function SearchClient({ query, weather }: { query: SearchQuery; weather: WeatherDay[] }) {
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = React.useState(query.date);
   const [sort, setSort] = React.useState<SortKey>("price");
   const [chosenId, setChosenId] = React.useState<string | null>(null);
+
+  // Keep local state in sync when the URL date changes (browser back/forward).
+  // Render-phase adjustment — the documented alternative to a sync effect.
+  const [lastUrlDate, setLastUrlDate] = React.useState(query.date);
+  if (lastUrlDate !== query.date) {
+    setLastUrlDate(query.date);
+    setSelectedDate(query.date);
+  }
+
+  // Day clicks update the URL date — every price, saving and warning on this
+  // page recomputes for the new day — while local state keeps clicks instant.
+  function selectDate(date: string) {
+    setSelectedDate(date);
+    const params = new URLSearchParams({
+      fromName: query.from.name,
+      fromLat: String(query.from.lat),
+      fromLon: String(query.from.lon),
+      toName: query.to.name,
+      toLat: String(query.to.lat),
+      toLon: String(query.to.lon),
+      date,
+      size: query.size,
+      services: query.services.join(","),
+    });
+    router.push(`/search?${params.toString()}`, { scroll: false });
+  }
+
+  // Checklist follows the search — and the day the visitor actually picked.
+  const planHref = `/plan/s?${new URLSearchParams({
+    from: query.from.name,
+    fromLat: String(query.from.lat),
+    fromLon: String(query.from.lon),
+    to: query.to.name,
+    toLat: String(query.to.lat),
+    toLon: String(query.to.lon),
+    date: selectedDate,
+    size: query.size,
+  })}`;
 
   const scoreFor = React.useCallback(
     (date: string) => weather.find((d) => d.date === date)?.score,
@@ -74,10 +115,50 @@ export function SearchClient({ query, weather }: { query: SearchQuery; weather: 
 
   const best = React.useMemo(() => bestDay(weather, query.date), [weather, query.date]);
 
+  // Keep the strip honest: the best day is centered on load, the picked day
+  // follows clicks — no manual scrolling to find the recommendation.
+  const stripRef = React.useRef<HTMLDivElement | null>(null);
+  const userPicked = React.useRef(false);
+  const centerDay = React.useCallback((date: string, smooth: boolean) => {
+    const strip = stripRef.current;
+    const el = strip?.querySelector<HTMLElement>(`[data-date="${date}"]`);
+    if (strip && el) {
+      strip.scrollTo({
+        left: el.offsetLeft - strip.clientWidth / 2 + el.clientWidth / 2,
+        behavior: smooth ? "smooth" : "auto",
+      });
+    }
+  }, []);
+  const bestDate = best?.date;
+  React.useEffect(() => {
+    if (!bestDate) return;
+    // Center now, then again once layout/fonts settle — measuring before
+    // first paint can leave the best day clipped at the strip's right edge.
+    centerDay(bestDate, false);
+    const raf = requestAnimationFrame(() => centerDay(bestDate, false));
+    const settle = window.setTimeout(() => centerDay(bestDate, false), 150);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(settle);
+    };
+  }, [bestDate, centerDay]);
+  React.useEffect(() => {
+    if (!userPicked.current) {
+      userPicked.current = true;
+      return;
+    }
+    centerDay(selectedDate, true);
+  }, [selectedDate, centerDay]);
+
   const cheapestToday = React.useMemo(
     () => Math.min(...MOVERS.map((m) => quotes.get(m.id)?.total ?? Infinity)),
     [quotes]
   );
+
+  // Honest state when the picked day lies outside the live 16-day window.
+  const outOfForecast =
+    weather.length > 0 &&
+    (selectedDate < weather[0].date || selectedDate > weather[weather.length - 1].date);
   const cheapestBest = React.useMemo(() => {
     if (!best || best.date === selectedDate) return null;
     const q = Math.min(
@@ -111,13 +192,22 @@ export function SearchClient({ query, weather }: { query: SearchQuery; weather: 
     <div className="flex min-h-dvh flex-1 flex-col">
       <header className="border-b border-border bg-card">
         <div className="mx-auto w-full max-w-6xl px-6 py-4">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-sm text-text-muted transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            New search
-          </Link>
+          <div className="flex items-center justify-between gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-sm text-text-muted transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              New search
+            </Link>
+            <Link
+              href={planHref}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline"
+            >
+              Open the checklist
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="font-display text-xl font-semibold tracking-tight sm:text-2xl">
               {query.from.name} → {query.to.name}
@@ -140,24 +230,28 @@ export function SearchClient({ query, weather }: { query: SearchQuery; weather: 
             <h2 className="kicker">Moving conditions · next 16 days at destination</h2>
             {best && (
               <p className="text-xs text-text-muted">
-                Best day:{" "}
                 <button
-                  onClick={() => setSelectedDate(best.date)}
-                  className="font-semibold text-accent hover:underline"
+                  onClick={() => selectDate(best.date)}
+                  className="group transition-colors hover:text-foreground"
                 >
-                  {fmtDay.format(new Date(`${best.date}T12:00:00Z`))}
+                  Best day:{" "}
+                  <span className="font-semibold text-accent group-hover:underline">
+                    {fmtDay.format(new Date(`${best.date}T12:00:00Z`))}
+                  </span>
                 </button>
               </p>
             )}
           </div>
           {weather.length > 0 ? (
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+            <div ref={stripRef} className="relative mt-3 flex gap-2 overflow-x-auto pb-2">
               {weather.map((day) => {
                 const active = day.date === selectedDate;
                 return (
                   <button
                     key={day.date}
-                    onClick={() => setSelectedDate(day.date)}
+                    data-date={day.date}
+                    aria-pressed={active}
+                    onClick={() => selectDate(day.date)}
                     className={
                       "w-20 shrink-0 rounded-md border p-2 text-left transition-colors " +
                       (active
@@ -187,6 +281,19 @@ export function SearchClient({ query, weather }: { query: SearchQuery; weather: 
               Forecast unavailable — prices below exclude weather adjustments.
             </p>
           )}
+          {outOfForecast && (
+            <p className="mt-2 flex items-start gap-2 rounded-md border border-border bg-card p-3 text-sm leading-relaxed text-text-muted">
+              <Umbrella className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <span>
+                <strong className="text-foreground">
+                  {fmtDay.format(new Date(`${selectedDate}T12:00:00Z`))} is{" "}
+                  {selectedDate > weather[weather.length - 1].date ? "beyond" : "outside"} the
+                  16-day forecast
+                </strong>{" "}
+                — prices are final, weather check opens closer to the day.
+              </span>
+            </p>
+          )}
           {savings !== null && savings > 0 && best && (
             <p className="mt-2 flex items-center gap-2 text-sm">
               <Umbrella className="h-4 w-4 text-accent" />
@@ -210,6 +317,58 @@ export function SearchClient({ query, weather }: { query: SearchQuery; weather: 
                   loading zones mean the winter-handling fees you see below and a
                   higher chance of something breaking. If moves your booking to a
                   safer day at no cost if the forecast worsens.
+                </span>
+              </p>
+            );
+          })()}
+          {(() => {
+            const sel = weather.find((d) => d.date === selectedDate);
+            if (!sel) return null;
+            const win = sel.bestWindow;
+            if (win) {
+              return (
+                <p className="mt-2 flex items-center gap-2 text-sm">
+                  <Timer className="h-4 w-4 shrink-0 text-accent" />
+                  <span>
+                    Best loading window{" "}
+                    <strong>{fmtDay.format(new Date(`${win.date}T12:00:00Z`))}</strong> ·{" "}
+                    <strong className="tnum">
+                      {fmtHour(win.startHour)}–{fmtHour(win.endHour)}
+                    </strong>{" "}
+                    · {win.precip.toFixed(1)} mm rain
+                    {win.snow > 0 && <> · {win.snow.toFixed(1)} cm snow</>} · gusts up to{" "}
+                    {Math.round((win.maxGust / 3.6) * 10) / 10} m/s
+                  </span>
+                </p>
+              );
+            }
+            // Hourly data loaded (some other day has a window) but not this one —
+            // say so honestly and point at the best window in the next 3 days.
+            if (!weather.some((d) => d.bestWindow)) return null;
+            const limit = new Date(`${selectedDate}T12:00:00Z`);
+            limit.setUTCDate(limit.getUTCDate() + 3);
+            const limitDate = limit.toISOString().slice(0, 10);
+            const alt = weather
+              .filter((d) => d.date > selectedDate && d.date <= limitDate && d.bestWindow)
+              .map((d) => d.bestWindow!)
+              .sort(
+                (a, b) =>
+                  b.score - a.score ||
+                  b.endHour - b.startHour - (a.endHour - a.startHour) ||
+                  a.date.localeCompare(b.date)
+              )[0];
+            if (!alt) return null;
+            return (
+              <p className="mt-2 flex items-center gap-2 text-sm text-text-muted">
+                <Timer className="h-4 w-4 shrink-0" />
+                <span>
+                  No dry window ≥3 h on{" "}
+                  {fmtDay.format(new Date(`${selectedDate}T12:00:00Z`))} — consider{" "}
+                  <strong className="text-foreground">
+                    {fmtDay.format(new Date(`${alt.date}T12:00:00Z`))} {fmtHour(alt.startHour)}–
+                    {fmtHour(alt.endHour)}
+                  </strong>{" "}
+                  (best of the next 3 days).
                 </span>
               </p>
             );
@@ -261,7 +420,9 @@ export function SearchClient({ query, weather }: { query: SearchQuery; weather: 
             . The same inputs produce the same number for every operator, so nothing
             here can be jacked up between your search and your booking. Weekend
             factors and winter-handling fees are quoted as line items, never
-            buried. If vets every operator, tracks their damage claims, and tops
+            buried. The If top-up follows the same open rule — base plus a fixed
+            amount per started €10 000 of cover gap, printed on every card. If
+            vets every operator, tracks their damage claims, and tops
             up any cover gap — operators compete for your booking, If earns a
             customer for everything a new home needs.
           </p>
@@ -297,7 +458,8 @@ function MoverCard({
 }) {
   const missing = missingServices(mover, requestedServices);
   const contents = CONTENTS_VALUE[homeSize];
-  const coverGap = contents > mover.insuranceCap;
+  const gap = contents - mover.insuranceCap;
+  const topUp = topUpPricing(gap);
 
   return (
     <article className="rounded-lg border border-border bg-card">
@@ -394,9 +556,15 @@ function MoverCard({
               </tbody>
             </table>
           </details>
+          <p className="mt-2 text-xs leading-relaxed text-text-muted">
+            {mover.priceLock
+              ? "Price-locked — the number you book is the invoice."
+              : "Estimate — under Finnish consumer guidance a final invoice may not exceed the estimate by more than 15%."}
+          </p>
           <div className="mt-auto pt-4">
             <button
               onClick={onChoose}
+              disabled={chosen && !mover.instantBooking}
               className={
                 "w-full rounded-md px-4 py-2.5 text-sm font-semibold transition-colors " +
                 (chosen
@@ -405,25 +573,45 @@ function MoverCard({
               }
             >
               {chosen
-                ? "Held for 48 h at this price"
+                ? mover.instantBooking
+                  ? "Held for 48 h at this price"
+                  : `Quote requested — ${mover.name} confirms within 24 h`
                 : mover.instantBooking
                   ? `Book for ${euro(quote.total)}`
                   : "Request final quote"}
             </button>
             {chosen && (
               <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                Demo: no payment taken. Cancel free until 72 h before the move.
-                {coverGap
-                  ? ` If top-up added for 60 days at no charge — your full ~${euro(contents)} of contents is covered from the first box.`
-                  : ` Damage cover ${euro(mover.insuranceCap)} is enough for a home this size.`}
+                {mover.instantBooking
+                  ? "Demo: no payment taken. Cancel free until 72 h before the move."
+                  : "Demo: no payment taken. Nothing is booked until you accept the final quote."}
+                {topUp
+                  ? ` If top-up (normally ${euroCents(topUp.monthly)}/mo) included free for 60 days — your full ~${euro(contents)} of contents is covered from the first box.`
+                  : ` Damage cover ${euro(mover.insuranceCap)} covers ~${euro(contents)} — enough for a home this size.`}
               </p>
             )}
-            {coverGap && !chosen && (
-              <p className="mt-2 rounded-md border border-orange-200 bg-orange-50 p-2 text-xs leading-relaxed text-orange-900">
-                <strong>Cover gap:</strong> this operator covers {euro(mover.insuranceCap)}{" "}
-                but a home this size holds ~{euro(contents)}. If tops up the
-                difference from €4.90/mo.
-              </p>
+            {topUp && !chosen && (
+              <details className="mt-2 rounded-md border border-orange-200 bg-orange-50 p-2 text-xs leading-relaxed text-orange-900">
+                <summary className="cursor-pointer select-none">
+                  <strong>Cover gap:</strong> covers {euro(mover.insuranceCap)} of ~{euro(contents)} — If top-up {euroCents(topUp.monthly)}/mo.
+                </summary>
+                <div className="mt-1.5 space-y-1 border-t border-orange-200 pt-1.5">
+                  <p className="tnum">
+                    {euro(contents)} − {euro(mover.insuranceCap)} = {euro(gap)} gap →{" "}
+                    {euroCents(TOP_UP.base)} + {topUp.blocks} × {euroCents(TOP_UP.per10k)} per
+                    started €10 000 = <strong>{euroCents(topUp.monthly)}/mo</strong>
+                  </p>
+                  <p>
+                    Contents estimate: {homeSize} ≈ {euro(contents)} — Finnish household
+                    average for a home this size.
+                  </p>
+                  <p>
+                    Your home insurance covers your belongings at both addresses during
+                    the move — the top-up closes the gap left by the mover’s
+                    transport-liability cap.
+                  </p>
+                </div>
+              </details>
             )}
           </div>
         </div>

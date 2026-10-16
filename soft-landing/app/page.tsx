@@ -12,8 +12,8 @@ import { SERVICE_LABELS, type MoverService } from "@/lib/movers";
 const SERVICE_KEYS = Object.keys(SERVICE_LABELS) as MoverService[];
 
 const stats = [
-  { value: "1 in 3", label: "movers say the final bill came in above the quote" },
-  { value: "+23%", label: "typical gap between the phone quote and the invoice" },
+  { value: "1.2M", label: "homes move inside Finland every year — Statistics Finland" },
+  { value: "+15%", label: "the most a final invoice may exceed an estimate, per Finnish consumer guidance" },
   { value: "€0", label: "charged for comparing — operators pay us, never you" },
 ];
 
@@ -34,7 +34,7 @@ const principles = [
     icon: ShieldCheck,
     title: "Covered when things break anyway",
     detail:
-      "Each operator's damage rate and cover limit is public. Anything their policy leaves open, an If top-up covers in one click — priced before you book.",
+      "Each operator's damage rate and cover limit is public. Your home insurance covers your belongings at both addresses during the move — a priced If top-up closes whatever the mover's transport-liability cap leaves open.",
   },
 ];
 
@@ -57,6 +57,9 @@ export default function Home() {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    // Clock-derived defaults must be set after mount: a lazy initializer would
+    // render a different date on the server (SSR) than on the client.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMinDate(toLocalDate(new Date()));
     const nextSaturday = new Date();
     const diff = (6 - new Date().getDay() + 7) % 7;
@@ -146,6 +149,11 @@ export default function Home() {
                     onChange={(e) => setMoveDate(e.target.value)}
                     className="mt-2 w-full rounded-md border border-border bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                   />
+                  <span className="tnum mt-1.5 block text-xs text-text-muted">
+                    {moveDate
+                      ? `Chosen: ${moveDate.split("-").reverse().join(".")}`
+                      : "Format: dd.mm.yyyy"}
+                  </span>
                 </label>
                 <label className="block">
                   <span className="kicker">Home size</span>

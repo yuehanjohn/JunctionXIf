@@ -1,6 +1,36 @@
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { ChecklistItem, MovePlan } from "./types";
 
-const plans = new Map<string, MovePlan>();
+// Pages and route handlers compile to separate module instances in Next dev,
+// so a plain in-memory Map is not shared between them: a plan seeded during a
+// page render was invisible to the API routes (every PATCH/POST 404'd).
+// Backing the store with one small JSON file makes every instance — and every
+// hot reload — see the same plans.
+const STORE_FILE = path.join(tmpdir(), "soft-landing-plans.json");
+
+type StoreFile = { plans: Record<string, MovePlan> };
+
+function readStore(): StoreFile {
+  try {
+    return JSON.parse(readFileSync(STORE_FILE, "utf8")) as StoreFile;
+  } catch {
+    return { plans: {} };
+  }
+}
+
+function writeStore(store: StoreFile): void {
+  const tmp = `${STORE_FILE}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(store));
+  renameSync(tmp, STORE_FILE);
+}
+
+function putPlan(plan: MovePlan): void {
+  const store = readStore();
+  store.plans[plan.id] = plan;
+  writeStore(store);
+}
 
 export function makeChecklist(): ChecklistItem[] {
   return [
@@ -87,29 +117,64 @@ function seedPlan(): MovePlan {
   };
 }
 
-plans.set("demo", seedPlan());
+if (!getPlan("demo")) {
+  putPlan(seedPlan());
+}
 
 export function getPlan(id: string): MovePlan | undefined {
-  return plans.get(id);
+  return readStore().plans[id];
 }
 
 export function createPlan(plan: MovePlan): MovePlan {
-  plans.set(plan.id, plan);
+  putPlan(plan);
   return plan;
 }
 
+/** Everything needed to build a plan from the search the visitor just made. */
+export type PlanSeed = Pick<
+  MovePlan,
+  "fromName" | "fromLat" | "fromLon" | "toName" | "toLat" | "toLon" | "moveDate" | "homeSize"
+>;
+
+function slugify(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "x"
+  );
+}
+
+export function seededPlanId(seed: PlanSeed): string {
+  return `s-${slugify(seed.fromName)}-${slugify(seed.toName)}-${seed.moveDate}-${slugify(seed.homeSize)}`;
+}
+
+/** Idempotent: the same search context always resolves to the same plan. */
+export function ensureSeededPlan(seed: PlanSeed): MovePlan {
+  const id = seededPlanId(seed);
+  const existing = getPlan(id);
+  if (existing) return existing;
+  return createPlan({
+    ...seed,
+    id,
+    checklist: makeChecklist(),
+    createdAt: new Date().toISOString(),
+  });
+}
+
 export function updatePlan(plan: MovePlan): MovePlan {
-  plans.set(plan.id, plan);
+  putPlan(plan);
   return plan;
 }
 
 export type PatchOutcome = { ok: true; plan: MovePlan } | { ok: false; error: string };
 
 export function patchChecklistItem(id: string, itemId: string, done: boolean): PatchOutcome {
-  const plan = plans.get(id);
+  const plan = getPlan(id);
   if (!plan) return { ok: false, error: "Plan not found" };
   const item = plan.checklist.find((entry) => entry.id === itemId);
   if (!item) return { ok: false, error: `Checklist item '${itemId}' not found` };
   item.done = done;
+  putPlan(plan);
   return { ok: true, plan };
 }

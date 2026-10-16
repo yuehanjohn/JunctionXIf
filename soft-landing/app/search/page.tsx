@@ -2,13 +2,29 @@ import Link from "next/link";
 import { SearchClient, type SearchQuery } from "./SearchClient";
 import { fetchWeatherDays } from "@/lib/weather";
 import type { WeatherDay } from "@/lib/types";
-import { HOME_SIZES, type HomeSize } from "@/lib/pricing";
+import type { HomeSize } from "@/lib/pricing";
 import type { MoverService } from "@/lib/movers";
 
 // Search results depend on query params + live weather; render per request.
 export const instant = false;
 
-const SERVICES = new Set<MoverService>(["packing", "storage", "piano", "assembly", "cleaning"]);
+const SERVICES: Record<MoverService, true> = {
+  packing: true,
+  storage: true,
+  piano: true,
+  assembly: true,
+  cleaning: true,
+};
+
+/** Deep links hand-typed in any case or spacing still resolve: "studio" → "Studio". */
+function normalizeSize(raw: string): HomeSize | null {
+  const compact = raw.trim().toLowerCase().replace(/\s+/g, "");
+  if (compact === "studio") return "Studio";
+  if (compact === "1–2rooms" || compact === "1-2rooms") return "1–2 rooms";
+  if (compact === "3+rooms") return "3+ rooms";
+  if (compact === "house") return "House";
+  return null;
+}
 
 type Params = Record<string, string | string[] | undefined>;
 
@@ -40,16 +56,15 @@ export default async function SearchPage({
     lon: num(sp, "toLon") ?? 0,
   };
   const date = str(sp, "date") ?? "";
-  const size = str(sp, "size") ?? "";
+  const sizeRaw = str(sp, "size");
+  const size = sizeRaw ? normalizeSize(sizeRaw) : null;
+  // Unknown service tokens are ignored; one valid one is enough.
   const services = str(sp, "services")
     ?.split(",")
-    .filter((s): s is MoverService => SERVICES.has(s as MoverService)) ?? [];
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is MoverService => SERVICES[s as MoverService] === true) ?? [];
 
-  const valid = Boolean(
-    date && (HOME_SIZES as string[]).includes(size) && (from.lat || from.lon) && (to.lat || to.lon)
-  );
-
-  if (!valid) {
+  if (!date || !size || !(from.lat || from.lon) || !(to.lat || to.lon)) {
     return (
       <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col items-start justify-center gap-4 px-6">
         <p className="font-display text-2xl font-semibold">That search didn’t come through.</p>
@@ -73,6 +88,6 @@ export default async function SearchPage({
     weather = [];
   }
 
-  const query: SearchQuery = { from, to, date, size: size as HomeSize, services };
+  const query: SearchQuery = { from, to, date, size, services };
   return <SearchClient query={query} weather={weather} />;
 }

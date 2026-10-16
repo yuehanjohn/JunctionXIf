@@ -35,4 +35,4 @@ Open http://localhost:4517 — **"See a demo plan"** jumps straight into a seede
 - `app/onboarding/` — 2-step wizard: geocoded addresses → date + home size
 - `app/plan/[id]/` — dashboard: weather strip, best-day callout, checklist timeline, one-click address change, coverage aside
 - `app/api/` — `geocode`, `weather`, `plan` (+ `plan/[id]/address-change`)
-- `lib/` — types, in-memory store, weather risk scoring
+- `lib/` — types, file-backed plan store (shared across page and route module instances), weather risk scoring

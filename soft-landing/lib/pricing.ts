@@ -32,6 +32,23 @@ export const CONTENTS_VALUE: Record<HomeSize, number> = {
   House: 85000,
 };
 
+/**
+ * If top-up cover, priced off the actual gap between the operator's cap and
+ * the contents value — never a flat rate. Open rule: a small base plus a
+ * fixed amount for each started €10 000 of gap, rounded to 10 cents, so the
+ * same gap always costs the same on every card.
+ */
+export const TOP_UP = { base: 2.5, per10k: 2.4 } as const;
+
+export function topUpPricing(gap: number): { blocks: number; monthly: number } | null {
+  if (!(gap > 0)) return null;
+  const blocks = Math.ceil(gap / 10_000);
+  return {
+    blocks,
+    monthly: Math.round((TOP_UP.base + blocks * TOP_UP.per10k) * 10) / 10,
+  };
+}
+
 export type PriceLine = {
   label: string;
   amount: number;
@@ -146,4 +163,9 @@ export function bestDay(days: WeatherDay[], fromDate: string): WeatherDay | unde
 
 export function euro(n: number): string {
   return `€${n.toLocaleString("fi-FI")}`;
+}
+
+/** Like euro(), but keeps cents — for monthly premiums. */
+export function euroCents(n: number): string {
+  return `€${n.toFixed(2)}`;
 }

@@ -17,6 +17,8 @@ type GeocodeResult = {
   longitude: number;
   country: string;
   admin1: string;
+  admin2: string;
+  population: number | null;
 };
 
 type Props = {
@@ -28,6 +30,9 @@ type Props = {
 };
 
 function resultLabel(r: GeocodeResult) {
+  // Districts read better with the parent city than the region ("Kallio · Helsinki").
+  // Without an admin2, fall back to the region/country form.
+  if (r.admin2) return [r.name, r.admin2].filter(Boolean).join(" · ");
   return [r.name, r.admin1, r.country].filter(Boolean).join(", ");
 }
 
@@ -54,33 +59,36 @@ export function AddressInput({ id, label, placeholder, value, onChange }: Props)
   React.useEffect(() => {
     const q = query.trim();
     if (value && q === value.label) return;
-    if (q.length < 2) {
-      setResults([]);
-      setOpen(false);
-      setLoading(false);
-      setError(null);
-      return;
-    }
 
-    setLoading(true);
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/geocode?name=${encodeURIComponent(q)}`);
-        const data = (await res.json()) as { ok?: boolean; results?: GeocodeResult[]; error?: string };
-        if (!res.ok || !data.ok) throw new Error(data.error ?? "Search failed");
-        const hits = data.results ?? [];
-        setResults(hits);
-        setHighlight(0);
-        setError(hits.length === 0 ? "No matches found — try a nearby city or town" : null);
-        setOpen(true);
-      } catch {
-        setResults([]);
-        setError("Couldn't reach the address search. Check your connection and try again.");
-        setOpen(true);
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
+    const t = setTimeout(
+      async () => {
+        if (q.length < 2) {
+          setResults([]);
+          setOpen(false);
+          setLoading(false);
+          setError(null);
+          return;
+        }
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/geocode?name=${encodeURIComponent(q)}`);
+          const data = (await res.json()) as { ok?: boolean; results?: GeocodeResult[]; error?: string };
+          if (!res.ok || !data.ok) throw new Error(data.error ?? "Search failed");
+          const hits = data.results ?? [];
+          setResults(hits);
+          setHighlight(0);
+          setError(hits.length === 0 ? "No matches found — try a nearby city or town" : null);
+          setOpen(true);
+        } catch {
+          setResults([]);
+          setError("Couldn't reach the address search. Check your connection and try again.");
+          setOpen(true);
+        } finally {
+          setLoading(false);
+        }
+      },
+      q.length < 2 ? 0 : 300
+    );
 
     return () => clearTimeout(t);
   }, [query, value]);
@@ -210,7 +218,7 @@ export function AddressInput({ id, label, placeholder, value, onChange }: Props)
                       {selected && <span className="ml-1.5 text-xs text-accent">currently selected</span>}
                     </span>
                     <span className="block truncate text-xs text-text-muted">
-                      {[r.admin1, r.country].filter(Boolean).join(", ")}
+                      {[r.admin2, r.admin1, r.country].filter(Boolean).join(", ")}
                     </span>
                   </span>
                 </button>

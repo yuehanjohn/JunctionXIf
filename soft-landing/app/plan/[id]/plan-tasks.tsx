@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CalendarCheck,
   Check,
@@ -12,7 +12,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Badge, Button, Card, CardTitle, Progress, cx } from "@/components/ui";
-import type { ChecklistItem } from "@/lib/types";
+import type { ChecklistItem, MovePlan } from "@/lib/types";
 
 type Notification = { service: string; status: string };
 
@@ -48,12 +48,31 @@ type PlanTasksProps = {
 export function PlanTasks({ planId, moveDate, initialItems }: PlanTasksProps) {
   const [items, setItems] = useState(initialItems);
   const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
-  const [phase, setPhase] = useState<"idle" | "sending" | "done" | "error">(() => {
-    const dvv = initialItems.find((i) => i.id === "dvv-notification")?.done;
-    const posti = initialItems.find((i) => i.id === "posti-forwarding")?.done;
-    return dvv && posti ? "done" : "idle";
-  });
+  const [phase, setPhase] = useState<"idle" | "sending" | "error">("idle");
+  // The sent confirmation is keyed to the filing record the store kept when
+  // the notifications were actually sent — never derived from checklist
+  // items, which can be pre-checked on a plan filed for a different date.
+  const [filedFor, setFiledFor] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[] | null>(null);
+
+  // Revalidate against the store: checklist and filing state can change
+  // between the server render and hydration.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/plan/${encodeURIComponent(planId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { ok: boolean; plan?: MovePlan } | null) => {
+        if (cancelled || !data?.ok || !data.plan) return;
+        setItems(data.plan.checklist);
+        setFiledFor(data.plan.addressChangeFiledFor ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [planId]);
+
+  const filed = filedFor !== null && filedFor === moveDate;
 
   const doneCount = items.filter((item) => item.done).length;
 
@@ -63,7 +82,7 @@ export function PlanTasks({ planId, moveDate, initialItems }: PlanTasksProps) {
     );
     setSavingIds((prev) => new Set(prev).add(itemId));
     try {
-      const res = await fetch(`/api/plan?id=${encodeURIComponent(planId)}`, {
+      const res = await fetch(`/api/plan/${encodeURIComponent(planId)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemId, done: nextDone }),
@@ -91,7 +110,7 @@ export function PlanTasks({ planId, moveDate, initialItems }: PlanTasksProps) {
       );
       const data = (await res.json()) as {
         ok: boolean;
-        plan?: { checklist: ChecklistItem[] };
+        plan?: MovePlan;
         notifications?: Notification[];
       };
       if (!res.ok || !data.ok || !data.plan || !data.notifications) {
@@ -99,7 +118,8 @@ export function PlanTasks({ planId, moveDate, initialItems }: PlanTasksProps) {
       }
       setItems(data.plan.checklist);
       setNotifications(data.notifications);
-      setPhase("done");
+      setFiledFor(data.plan.addressChangeFiledFor ?? moveDate);
+      setPhase("idle");
     } catch {
       setPhase("error");
     }
@@ -126,7 +146,7 @@ export function PlanTasks({ planId, moveDate, initialItems }: PlanTasksProps) {
         </div>
 
         <div className="mt-4">
-          {phase === "done" ? (
+          {filed ? (
             <div className="space-y-3">
               <ul className="space-y-2">
                 {(notifications ?? [
@@ -146,14 +166,20 @@ export function PlanTasks({ planId, moveDate, initialItems }: PlanTasksProps) {
                 ))}
               </ul>
               <Button variant="secondary" disabled className="w-full">
-                You're all set
+                Sent ✓ — DVV + Posti filed for {formatDay(filedFor ?? moveDate)}
               </Button>
             </div>
           ) : (
             <div className="space-y-3">
+              {filedFor !== null && filedFor !== moveDate && (
+                <p className="text-sm text-text-muted">
+                  You already filed for {formatDay(filedFor)} — send again to
+                  file for {formatDay(moveDate)}.
+                </p>
+              )}
               {phase === "error" && (
                 <p className="text-sm text-amber-700">
-                  That didn't go through — nothing was lost. Try again in a moment.
+                  That didn’t go through — nothing was lost. Try again in a moment.
                 </p>
               )}
               <Button
