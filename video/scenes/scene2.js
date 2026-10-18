@@ -1,389 +1,506 @@
-// Scene 2 — Product showcase. 30s.
-// Flow: City in/out -> search -> cheapest firm -> If home insurance view ->
-// checklist tick -> confetti. 1920x1080. Warm paper palette.
+// Scene 2 — Product showcase (MoveScanner & If Home Insurance).
+// 100% Real Product Screens captured from running application.
+// 30 seconds (0-30s), 1920x1080 @ 30fps.
 (function () {
-  const ease = (x) => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
-  const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
   const seg = (t, a, b) => clamp01((t - a) / (b - a));
+  const ease = (x) => (x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x));
+  const easeOutCubic = (x) => (x < 0 ? 0 : x > 1 ? 1 : 1 - Math.pow(1 - x, 3));
+  const easeInOutCubic = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
-  // palette
-  const C = {
-    paper: "#f5efe4", card: "#fdfaf4", ink: "#3a3226", muted: "#8a7d68",
-    line: "#e2d8c4", accent: "#e8956d", ifred: "#c8102e", green: "#5f9e6e",
-    blue: "#4a7ba6", shadow: "rgba(90,70,45,0.08)"
-  };
+  // Modern browser top chrome (height = 48px)
+  function drawChrome(ctx, W, url) {
+    const H_BAR = 48;
+    // Chrome background (warm paper tint matching MoveScanner)
+    ctx.fillStyle = "#efe7da";
+    ctx.fillRect(0, 0, W, H_BAR);
 
-  function roundRect(ctx, x, y, w, h, r) {
+    // Subtle bottom border
+    ctx.fillStyle = "#ded3bf";
+    ctx.fillRect(0, H_BAR - 1, W, 1);
+
+    // macOS window dots
+    const dots = [
+      { x: 26, color: "#ff5f56" },
+      { x: 46, color: "#ffbd2e" },
+      { x: 66, color: "#27c93f" },
+    ];
+    for (const d of dots) {
+      ctx.beginPath();
+      ctx.arc(d.x, H_BAR / 2, 6, 0, Math.PI * 2);
+      ctx.fillStyle = d.color;
+      ctx.fill();
+    }
+
+    // URL bar pill
+    const pillW = 660;
+    const pillH = 30;
+    const pillX = (W - pillW) / 2;
+    const pillY = (H_BAR - pillH) / 2;
+
+    ctx.fillStyle = "#fdfbf7";
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
+    ctx.roundRect(pillX, pillY, pillW, pillH, 7);
+    ctx.fill();
+    ctx.strokeStyle = "#dbd0be";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Lock icon (HTTPS)
+    ctx.save();
+    ctx.translate(pillX + 16, pillY + 10);
+    ctx.fillStyle = "#6b7280";
+    ctx.fillRect(1, 4, 8, 7);
+    ctx.beginPath();
+    ctx.arc(5, 4, 3, Math.PI, 0);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = "#6b7280";
+    ctx.stroke();
+    ctx.restore();
+
+    // URL text
+    ctx.fillStyle = "#374151";
+    ctx.font = "500 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(url, pillX + 34, pillY + pillH / 2);
+
+    // Brand indicator on far right
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#8a7b68";
+    ctx.font = "600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText("MoveScanner · Live Demo", W - 28, H_BAR / 2);
   }
 
-  function shadowOn(ctx, blur, dy) {
-    ctx.shadowColor = "rgba(90,70,45,0.14)";
-    ctx.shadowBlur = blur;
-    ctx.shadowOffsetY = dy;
-  }
-  function shadowOff(ctx) {
-    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-  }
-
-  function cursor(ctx, x, y, scale, click) {
+  // Smooth realistic mouse pointer with click ripple
+  function drawCursor(ctx, x, y, scale = 1, click = 0) {
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
-    ctx.fillStyle = "#3a3226";
-    ctx.beginPath();
-    ctx.moveTo(0, 0); ctx.lineTo(0, 26); ctx.lineTo(7, 19); ctx.lineTo(11, 28);
-    ctx.lineTo(15, 26); ctx.lineTo(11, 17); ctx.lineTo(19, 17);
-    ctx.closePath(); ctx.fill();
+
+    // Click pulse ring
     if (click > 0) {
-      ctx.strokeStyle = "rgba(58,50,38," + (1 - click) + ")";
-      ctx.lineWidth = 2;
-      const r = 14 + click * 22;
-      ctx.beginPath(); ctx.arc(4, 4, r, 0, 7); ctx.stroke();
+      const pulseR = 10 + click * 32;
+      const alpha = Math.max(0, 1 - click);
+      ctx.beginPath();
+      ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(0, 84, 240, ${alpha * 0.75})`;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, pulseR * 0.45, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(0, 84, 240, ${alpha * 0.22})`;
+      ctx.fill();
     }
+
+    // Shadow
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 4;
+
+    // Dark cursor body with crisp white stroke
+    ctx.fillStyle = "#1e1e1e";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, 24);
+    ctx.lineTo(6.5, 18);
+    ctx.lineTo(11.5, 27);
+    ctx.lineTo(14.5, 25.5);
+    ctx.lineTo(9.5, 16.5);
+    ctx.lineTo(17.5, 16.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
     ctx.restore();
   }
 
-  // animated text typing
-  function typing(ctx, text, x, y, reveal, font, color) {
-    ctx.font = font; ctx.fillStyle = color; ctx.textAlign = "left";
-    const n = Math.floor(text.length * reveal);
-    ctx.fillText(text.slice(0, n), x, y);
-    if (reveal < 1 && Math.floor(t_global * 3) % 2 === 0) {
-      ctx.fillText("|", x + ctx.measureText(text.slice(0, n)).width + 2, y);
+  // Typing helper on top of input fields
+  function drawTypingText(ctx, text, x, y, progress, font = "400 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif") {
+    ctx.font = font;
+    ctx.fillStyle = "#1c1917";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    const chars = Math.floor(text.length * progress);
+    const displayed = text.slice(0, chars);
+    ctx.fillText(displayed, x, y);
+
+    // Blinking cursor
+    if (progress < 1 && Math.floor(Date.now() / 400) % 2 === 0) {
+      const w = ctx.measureText(displayed).width;
+      ctx.fillStyle = "#0054F0";
+      ctx.fillRect(x + w + 2, y - 8, 2, 16);
     }
   }
 
-  let t_global = 0;
+  // Confetti particles matching soft-landing/app/plan/[id]/plan-tasks.tsx
+  let CONFETTI = null;
+  function getConfetti(W, H) {
+    if (CONFETTI) return CONFETTI;
+    const seedRand = (i, k) => {
+      const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    const COLORS = ["#c2410c", "#0054F0", "#16a34a", "#eab308", "#db2777"];
+    const cannons = [
+      { x: W * 0.08, angle: 72, count: 85 },
+      { x: W * 0.92, angle: 108, count: 85 },
+      { x: W * 0.50, angle: 90, count: 90 },
+    ];
+    const pieces = [];
+    let idx = 0;
+    cannons.forEach((c) => {
+      for (let i = 0; i < c.count; i++) {
+        const r1 = seedRand(idx, 1);
+        const r2 = seedRand(idx, 2);
+        const r3 = seedRand(idx, 3);
+        const r4 = seedRand(idx, 4);
+        const r5 = seedRand(idx, 5);
 
+        const angle = ((c.angle + (r1 - 0.5) * 46) * Math.PI) / 180;
+        const speed = H * (0.65 + r2 * 0.55);
+        const vx = Math.cos(angle) * speed;
+        const vy = -Math.sin(angle) * speed;
+        const size = 6 + r3 * 7;
+        const ribbon = r4 > 0.75;
+        const w = ribbon ? 4 : size;
+        const h = ribbon ? 14 + r5 * 8 : size * 0.6;
+        const color = COLORS[Math.floor(r1 * COLORS.length)];
+        const spin = 540 + r2 * 900;
+        const duration = 2.0 + r3 * 1.4;
+
+        pieces.push({
+          x0: c.x,
+          y0: H - 8,
+          vx,
+          vy,
+          w,
+          h,
+          color,
+          spin,
+          duration,
+          isCircle: r5 > 0.6,
+        });
+        idx++;
+      }
+    });
+    CONFETTI = pieces;
+    return CONFETTI;
+  }
+
+  function drawConfetti(ctx, W, H, elapsed) {
+    const pieces = getConfetti(W, H);
+    pieces.forEach((p) => {
+      const prog = Math.min(1, elapsed / p.duration);
+      if (prog <= 0 || prog >= 1) return;
+
+      // Arc trajectory: upward initial boost, gravity downward
+      const px = p.x0 + p.vx * prog * 0.85;
+      const py = p.y0 + p.vy * prog + 980 * prog * prog;
+      const alpha = prog > 0.75 ? 1 - (prog - 0.75) / 0.25 : 1;
+
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate((p.spin * prog * Math.PI) / 180);
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.fillStyle = p.color;
+
+      if (p.isCircle) {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      }
+      ctx.restore();
+    });
+  }
+
+  // Main draw loop
   function draw(ctx, t, W, H) {
-    t_global = t;
-    // background
-    ctx.fillStyle = C.paper;
+    const H_BAR = 48;
+    const CONTENT_H = H - H_BAR; // 1032px
+
+    // Fallback background
+    ctx.fillStyle = "#f5efe4";
     ctx.fillRect(0, 0, W, H);
 
-    // browser window
-    const bx = 160, by = 110, bw = 1600, bh = 860;
-    shadowOn(ctx, 40, 18);
-    ctx.fillStyle = "#fdfaf4";
-    roundRect(ctx, bx, by, bw, bh, 18); ctx.fill();
-    shadowOff(ctx);
-    // title bar
-    ctx.fillStyle = "#ece3d0";
-    roundRect(ctx, bx, by, bw, 56, [18, 18, 0, 0]); ctx.fill();
-    ctx.fillStyle = "#d4c5a5";
-    [[bx + 34, by + 28, "#e08a72"], [bx + 64, by + 28, "#e8c060"], [bx + 94, by + 28, "#a0c080"]].forEach(([cx, cy, col]) => {
-      ctx.fillStyle = col;
-      ctx.beginPath(); ctx.arc(cx, cy, 8, 0, 7); ctx.fill();
-    });
-    ctx.fillStyle = C.muted;
-    ctx.font = "500 20px 'Segoe UI', sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("Soft Landing — mover comparison & If insurance", bx + 130, by + 35);
+    const A = window.ASSETS || {};
 
-    // ---- content ----
-    ctx.save();
-    ctx.beginPath(); roundRect(ctx, bx, by + 56, bw, bh - 56, [0, 0, 18, 18]); ctx.clip();
-
-    // header logo
-    ctx.fillStyle = C.ifred;
-    roundRect(ctx, bx + 40, by + 92, 56, 56, 12); ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.font = "700 32px Georgia";
-    ctx.textAlign = "center";
-    ctx.fillText("If", bx + 68, by + 130);
-
-    ctx.fillStyle = C.ink;
-    ctx.font = "600 28px 'Segoe UI', sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("Soft Landing", bx + 116, by + 130);
-
-    // phase 1: search form (0-9s)
-    const searchFade = 1 - seg(t, 9.5, 10.5);  // fades out after 9.5s
-    if (searchFade > 0) {
-      ctx.globalAlpha = searchFade;
-      const fy = by + 220;
-      // card
-      shadowOn(ctx, 24, 10);
-      ctx.fillStyle = C.card;
-      roundRect(ctx, bx + 180, fy, bw - 360, 240, 16); ctx.fill();
-      shadowOff(ctx);
-      ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke();
-
-      // from field
-      ctx.fillStyle = C.muted; ctx.font = "500 18px 'Segoe UI'";
-      ctx.fillText("MOVING FROM", bx + 220, fy + 42);
-      ctx.fillStyle = "#fff";
-      roundRect(ctx, bx + 220, fy + 58, 420, 52, 10); ctx.fill();
-      ctx.strokeStyle = seg(t, 1, 2) > 0 ? C.blue : C.line;
-      ctx.stroke();
-      const fromReveal = seg(t, 1.2, 2.8);
-      typing(ctx, "Helsinki", bx + 240, fy + 92, fromReveal, "400 26px 'Segoe UI'", C.ink);
-
-      // to field
-      ctx.fillText("MOVING TO", bx + 700, fy + 42);
-      ctx.fillStyle = "#fff";
-      roundRect(ctx, bx + 700, fy + 58, 420, 52, 10); ctx.fill();
-      ctx.strokeStyle = seg(t, 3, 4) > 0 ? C.blue : C.line;
-      ctx.stroke();
-      const toReveal = seg(t, 3.2, 4.8);
-      typing(ctx, "Tampere", bx + 720, fy + 92, toReveal, "400 26px 'Segoe UI'", C.ink);
-
-      // search button
-      const btnIn = seg(t, 5, 6);
-      const btnHover = seg(t, 6, 6.8);
-      const btnClick = seg(t, 7.8, 8.1);
-      const press = 1 - btnClick * 0.6;
+    // =========================================================================
+    // PHASE 1: Real Landing Page (0.0s - 6.0s)
+    // =========================================================================
+    if (t < 6.2) {
+      const p1Alpha = 1 - seg(t, 5.7, 6.2);
       ctx.save();
-      ctx.translate(bx + 1200 + 100 * btnIn, fy + 58);
-      ctx.scale(press, press);
-      shadowOn(ctx, 18, 6);
-      ctx.fillStyle = C.accent;
-      roundRect(ctx, 0, 0, 260, 52, 10); ctx.fill();
-      shadowOff(ctx);
-      ctx.fillStyle = "#fff";
-      ctx.font = "600 24px 'Segoe UI'";
-      ctx.textAlign = "center";
-      ctx.fillText("Search", 130, 34);
-      ctx.restore();
+      ctx.globalAlpha = p1Alpha;
 
-      // mouse cursor moving from bottom right to button then clicking
-      const cx0 = bx + 1500, cy0 = by + 800;
-      const cx1 = bx + 1200 + 130, cy1 = fy + 84;
-      const m1 = ease(seg(t, 5.5, 6.6));
-      const mx = cx0 + (cx1 - cx0) * m1;
-      const my = cy0 + (cy1 - cy0) * m1;
-      cursor(ctx, mx, my, 1.4, btnClick > 0 ? btnClick : 0);
-      ctx.globalAlpha = 1;
-    }
+      // Render real landing page
+      const landingImg = A["01_landing_empty"];
+      if (landingImg) {
+        ctx.drawImage(landingImg, 0, H_BAR, W, CONTENT_H);
+      }
 
-    // phase 2: results (9.5-20s)
-    const resIn = seg(t, 9.8, 11.2);
-    const resOut = seg(t, 18.5, 19.5);
-    const resAlpha = Math.min(resIn, 1 - resOut);
-    if (resAlpha > 0) {
-      ctx.globalAlpha = resAlpha;
-      const ry = by + 220 - (1 - resIn) * 60;
-      // heading
-      ctx.fillStyle = C.ink;
-      ctx.font = "600 30px 'Segoe UI'";
-      ctx.textAlign = "left";
-      ctx.fillText("13 moving firms · Helsinki → Tampere", bx + 200, ry + 30);
-      ctx.fillStyle = C.muted;
-      ctx.font = "400 20px 'Segoe UI'";
-      ctx.fillText("Cheapest total, fixed quotes — sorted by price", bx + 200, ry + 62);
+      // Typing simulation in real inputs:
+      // "Moving from": x = 972, y = 212 + 48 = 260, w = 511, h = 42
+      // "Moving to":   x = 972, y = 296 + 48 = 344, w = 511, h = 42
+      // "Compare now": x = 972, y = 486 + 48 = 534, w = 511, h = 56
+      const fromTypeProg = seg(t, 1.1, 2.2);
+      if (fromTypeProg > 0) {
+        // Clear placeholder text after the pin icon
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(1006, 260 + 5, 450, 32);
+        drawTypingText(ctx, "Helsinki", 1008, 260 + 21, fromTypeProg);
+      }
 
-      // three mover cards
-      const movers = [
-        { name: "Kyyti-Muutot Oy", price: "€590", tag: "cheapest", x: bx + 200, w: 400 },
-        { name: "Pohjolan Siirto", price: "€640", tag: "", x: bx + 620, w: 400 },
-        { name: "Suomen Muuttoveljet", price: "€710", tag: "", x: bx + 1040, w: 400 },
-      ];
-      movers.forEach((m, i) => {
-        const cy = ry + 100 + i * 130;
-        const cardIn = ease(seg(t, 11 + i * 0.5, 12 + i * 0.5));
-        const isCheapest = i === 0;
-        const hover = isCheapest ? ease(seg(t, 14.5, 15.5)) : 0;
-        const selected = isCheapest ? seg(t, 16, 16.4) : 0;
-        const px = m.x + (1 - cardIn) * 80;
-        ctx.save();
-        ctx.globalAlpha = resAlpha * cardIn;
-        shadowOn(ctx, 20, 8);
-        ctx.fillStyle = selected ? "#f0f7ee" : C.card;
-        roundRect(ctx, px, cy, m.w, 110, 14); ctx.fill();
-        shadowOff(ctx);
-        ctx.strokeStyle = selected ? C.green : (isCheapest && hover ? C.accent : C.line);
-        ctx.lineWidth = selected ? 4 : 2;
-        ctx.stroke();
+      const toTypeProg = seg(t, 2.7, 3.8);
+      if (toTypeProg > 0) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(1006, 344 + 5, 450, 32);
+        drawTypingText(ctx, "Tampere", 1008, 344 + 21, toTypeProg);
+      }
 
-        // rank
-        ctx.fillStyle = isCheapest ? C.green : C.muted;
-        ctx.font = "700 22px 'Segoe UI'";
-        ctx.fillText((i + 1).toString(), px + 28, cy + 44);
-        // name
-        ctx.fillStyle = C.ink;
-        ctx.font = "600 24px 'Segoe UI'";
-        ctx.fillText(m.name, px + 70, cy + 44);
-        // rating
-        ctx.fillStyle = "#e8b44c";
-        ctx.font = "400 18px 'Segoe UI'";
-        ctx.fillText("★ 4." + (7 - i) + " · damage rate " + (1.2 + i * 1.4).toFixed(1) + "%", px + 70, cy + 74);
-        // price
-        ctx.fillStyle = isCheapest ? C.green : C.ink;
-        ctx.font = "700 34px 'Segoe UI'";
-        ctx.textAlign = "right";
-        ctx.fillText(m.price, px + m.w - 30, cy + 55);
-        ctx.textAlign = "left";
-        if (m.tag) {
-          ctx.fillStyle = C.green;
-          ctx.font = "600 16px 'Segoe UI'";
-          ctx.fillText("CHEAPEST", px + 240, cy + 30);
-        }
-        ctx.restore();
-      });
-
-      // cursor to cheapest card book button
-      const bookX = movers[0].x + movers[0].w - 70;
-      const bookY = ry + 100 + 55;
-      const m2 = ease(seg(t, 15.2, 16.2));
-      const bookClick = seg(t, 16.8, 17.1);
-      cursor(ctx, bookX + (1 - m2) * 200, bookY, 1.4, bookClick > 0 ? bookClick : 0);
-
-      ctx.globalAlpha = 1;
-    }
-
-    // phase 3: insurance view (19.5-24.5s)
-    const insIn = seg(t, 19.8, 21.2);
-    const insOut = seg(t, 23.5, 24.5);
-    const insAlpha = Math.min(insIn, 1 - insOut);
-    if (insAlpha > 0) {
-      ctx.globalAlpha = insAlpha;
-      const iy = by + 220 - (1 - insIn) * 60;
-      shadowOn(ctx, 24, 10);
-      ctx.fillStyle = C.card;
-      roundRect(ctx, bx + 200, iy, bw - 400, 320, 16); ctx.fill();
-      shadowOff(ctx);
-      ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke();
-
-      // calculating spinner
-      const calcT = seg(t, 20, 22);
-      if (calcT < 1) {
-        ctx.strokeStyle = C.blue; ctx.lineWidth = 6;
+      // Button hover & click
+      const btnHover = seg(t, 4.8, 5.2);
+      const btnClick = seg(t, 5.2, 5.5);
+      if (btnClick > 0 && btnClick < 1) {
+        // Subtle press overlay
+        ctx.fillStyle = "rgba(255,255,255,0.15)";
         ctx.beginPath();
-        ctx.arc(bx + 340, iy + 80, 24, t * 4, t * 4 + 4.2);
-        ctx.stroke();
-        ctx.fillStyle = C.ink;
-        ctx.font = "500 26px 'Segoe UI'";
-        ctx.fillText("Calculating best home insurance…", bx + 400, iy + 88);
+        ctx.roundRect(972, 534, 511, 56, 8);
+        ctx.fill();
+      }
+
+      // Cursor movement:
+      // Enters -> clicks From -> clicks To -> moves to Submit -> clicks Submit
+      let cx = 1450, cy = 720;
+      let cClick = 0;
+
+      if (t < 1.0) {
+        const m = easeInOutCubic(seg(t, 0.4, 0.95));
+        cx = 1450 + (1040 - 1450) * m;
+        cy = 720 + (281 - 720) * m;
+      } else if (t < 2.5) {
+        cx = 1040; cy = 281;
+        cClick = seg(t, 0.95, 1.15);
+      } else if (t < 2.7) {
+        const m = easeInOutCubic(seg(t, 2.5, 2.7));
+        cx = 1040;
+        cy = 281 + (365 - 281) * m;
+      } else if (t < 4.2) {
+        cx = 1040; cy = 365;
+        cClick = seg(t, 2.7, 2.9);
+      } else if (t < 5.2) {
+        const m = easeInOutCubic(seg(t, 4.2, 5.0));
+        cx = 1040 + (1227 - 1040) * m;
+        cy = 365 + (562 - 365) * m;
       } else {
-        // result
-        ctx.fillStyle = C.ifred;
-        roundRect(ctx, bx + 240, iy + 30, 64, 64, 14); ctx.fill();
-        ctx.fillStyle = "#fff";
-        ctx.font = "700 38px Georgia";
-        ctx.textAlign = "center";
-        ctx.fillText("If", bx + 272, iy + 74);
-        ctx.textAlign = "left";
-        ctx.fillStyle = C.ink;
-        ctx.font = "600 28px 'Segoe UI'";
-        ctx.fillText("If Vahinkovakuutus — Home Insurance", bx + 330, iy + 60);
-        ctx.fillStyle = C.green;
-        ctx.font = "700 26px 'Segoe UI'";
-        ctx.fillText("Best match", bx + 330, iy + 94);
-        // premium breakdown
-        ctx.fillStyle = C.muted;
-        ctx.font = "400 20px 'Segoe UI'";
-        const lines = [
-          ["Home type: apartment", "+ €2.10"],
-          ["Build year: 2014", "+ €1.40"],
-          ["Deductible: €500", "− €0.60"],
-        ];
-        lines.forEach(([l, v], i) => {
-          ctx.fillText(l, bx + 240, iy + 150 + i * 34);
-          ctx.textAlign = "right";
-          ctx.fillText(v, bx + 700, iy + 150 + i * 34);
-          ctx.textAlign = "left";
-        });
-        ctx.strokeStyle = C.line; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(bx + 240, iy + 262); ctx.lineTo(bx + 700, iy + 262); ctx.stroke();
-        ctx.fillStyle = C.ink;
-        ctx.font = "700 28px 'Segoe UI'";
-        ctx.fillText("Monthly premium", bx + 240, iy + 298);
-        ctx.fillStyle = C.ifred;
-        ctx.font = "700 36px 'Segoe UI'";
-        ctx.textAlign = "right";
-        ctx.fillText("€9.80/mo", bx + 700, iy + 300);
-        ctx.textAlign = "left";
+        cx = 1227; cy = 562;
+        cClick = seg(t, 5.2, 5.5);
       }
-      ctx.globalAlpha = 1;
+
+      drawCursor(ctx, cx, cy, 1.0, cClick);
+      ctx.restore();
     }
 
-    // phase 4: checklist (24.5-28.5s)
-    const clIn = seg(t, 24.8, 26.2);
-    const clAlpha = clIn;
-    if (clAlpha > 0) {
-      ctx.globalAlpha = clAlpha;
-      const ly = by + 220 - (1 - clIn) * 60;
-      ctx.fillStyle = C.ink;
-      ctx.font = "600 30px 'Segoe UI'";
-      ctx.fillText("Moving checklist — 3 days out", bx + 200, ly + 30);
-      const items = [
-        { label: "DVV muuttoilmoitus", done: true },
-        { label: "Posti mail forwarding", done: true },
-        { label: "Electricity contract", done: false },
-        { label: "Moving-elevator booking", done: false },
-        { label: "Fragile-item packing", done: false },
-      ];
-      items.forEach((it, i) => {
-        const iy = ly + 70 + i * 74;
-        const tickT = it.done ? 1 : seg(t, 25.5 + i * 0.35, 25.9 + i * 0.35);
-        // box
-        ctx.fillStyle = "#fff";
-        roundRect(ctx, bx + 200, iy, 40, 40, 8); ctx.fill();
-        ctx.strokeStyle = tickT > 0 ? C.green : C.line;
-        ctx.lineWidth = 3; ctx.stroke();
-        if (tickT > 0) {
-          ctx.strokeStyle = C.green; ctx.lineWidth = 5; ctx.lineCap = "round";
-          ctx.beginPath();
-          ctx.moveTo(bx + 210, iy + 20);
-          ctx.lineTo(bx + 218, iy + 30);
-          ctx.lineTo(bx + 234, iy + 10);
-          ctx.stroke();
-        }
-        // strike-through on tick
-        ctx.fillStyle = tickT > 0 ? C.muted : C.ink;
-        ctx.font = "500 26px 'Segoe UI'";
-        ctx.fillText(it.label, bx + 270, iy + 28);
-        if (tickT > 0) {
-          const sw = ctx.measureText(it.label).width * tickT;
-          ctx.strokeStyle = C.muted; ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.moveTo(bx + 270, iy + 20); ctx.lineTo(bx + 270 + sw, iy + 20); ctx.stroke();
-        }
-      });
-      ctx.globalAlpha = 1;
+    // =========================================================================
+    // PHASE 2: Real Search Comparison & Choose Cheapest Crew (6.0s - 12.5s)
+    // =========================================================================
+    if (t >= 5.7 && t < 12.8) {
+      const p2Alpha = Math.min(seg(t, 5.7, 6.2), 1 - seg(t, 12.4, 12.8));
+      ctx.save();
+      ctx.globalAlpha = p2Alpha;
+
+      // Smooth camera scroll: 0 -> 260px down
+      const scrollProgress = easeInOutCubic(seg(t, 7.8, 9.8));
+      const scrollY = scrollProgress * 260;
+
+      // Draw real search page with smooth vertical scroll
+      const searchImg = A["search_fullpage"] || A["02_search_top"];
+      if (searchImg) {
+        // Draw slice from full page
+        ctx.drawImage(
+          searchImg,
+          0, Math.round(scrollY), W, CONTENT_H,
+          0, H_BAR, W, CONTENT_H
+        );
+      }
+
+      // Cursor movement:
+      // Glides over the weather strip -> hovers on Sisu Crew card -> clicks "Book for €523"
+      let cx = 960, cy = 320;
+      let cClick = 0;
+
+      if (t < 7.8) {
+        const m = easeInOutCubic(seg(t, 6.2, 7.6));
+        cx = 700 + (1020 - 700) * m;
+        cy = 280 + (290 - 280) * m;
+      } else if (t < 11.2) {
+        const m = easeInOutCubic(seg(t, 8.5, 10.8));
+        cx = 1020 + (1379 - 1020) * m;
+        cy = 290 + (657 - scrollY + H_BAR - 290) * m;
+      } else {
+        cx = 1379;
+        cy = 657 - scrollY + H_BAR;
+        cClick = seg(t, 11.6, 12.1);
+      }
+
+      // Highlight on "Book for €523" button during click
+      if (cClick > 0) {
+        ctx.fillStyle = "rgba(0, 84, 240, 0.15)";
+        ctx.beginPath();
+        ctx.roundRect(1272, 637 - scrollY + H_BAR, 215, 40, 6);
+        ctx.fill();
+      }
+
+      drawCursor(ctx, cx, cy, 1.0, cClick);
+      ctx.restore();
     }
 
-    // ---- confetti (28.5-30s) ----
-    const cf = seg(t, 28.5, 30);
-    if (cf > 0) {
-      const seedRand = (i, k) => {
-        const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
-        return x - Math.floor(x);
-      };
-      for (let i = 0; i < 120; i++) {
-        const angle = seedRand(i, 1) * Math.PI * 2;
-        const speed = 200 + seedRand(i, 2) * 700;
-        const prog = ease(cf);
-        const px = W / 2 + Math.cos(angle) * speed * prog;
-        const py = H / 2 + Math.sin(angle) * speed * prog + prog * prog * 500;
-        const alpha = 1 - seg(t, 29.3, 30);
-        const colors = [C.accent, C.ifred, C.green, C.blue, "#e8b44c"];
-        ctx.globalAlpha = Math.max(0, alpha);
-        ctx.fillStyle = colors[i % 5];
+    // =========================================================================
+    // PHASE 3: Calculating Steps & If Home Insurance Reveal (12.5s - 21.3s)
+    // =========================================================================
+    if (t >= 12.4 && t < 21.6) {
+      const p3Alpha = Math.min(seg(t, 12.4, 12.8), 1 - seg(t, 21.0, 21.6));
+      ctx.save();
+      ctx.globalAlpha = p3Alpha;
+
+      if (t < 16.5) {
+        // 3.1: Calculation states
+        let calcImg = A["03_calc_step0"];
+        let spinY = 175; // Step 0 (127 + 48)
+        if (t >= 15.1) {
+          calcImg = A["03_calc_step2"];
+          spinY = 241; // Step 2 (193 + 48)
+        } else if (t >= 13.8) {
+          calcImg = A["03_calc_step1"];
+          spinY = 208; // Step 1 (160 + 48)
+        }
+
+        if (calcImg) {
+          ctx.drawImage(calcImg, 0, H_BAR, W, CONTENT_H);
+        }
+
+        // Animated rotating spinner over active step icon
+        const spinAngle = t * 7;
         ctx.save();
-        ctx.translate(px, py);
-        ctx.rotate(t * 6 + i);
-        const s = 8 + seedRand(i, 3) * 10;
-        ctx.fillRect(-s / 2, -s / 2, s, s * (0.4 + seedRand(i, 4)));
+        ctx.translate(449, spinY);
+        ctx.rotate(spinAngle);
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 1.5);
+        ctx.strokeStyle = "#0054F0";
+        ctx.lineWidth = 2.4;
+        ctx.stroke();
         ctx.restore();
-        ctx.globalAlpha = 1;
+
+        // Cursor waiting comfortably
+        drawCursor(ctx, 1100, 480, 1.0, 0);
+      } else {
+        // 3.2: Real If Home Insurance Panel
+        const ifRise = easeOutCubic(seg(t, 16.5, 17.2));
+        const dy = Math.round((1 - ifRise) * 35);
+
+        const ifImg = A["04_if_panel"];
+        if (ifImg) {
+          ctx.drawImage(ifImg, 0, H_BAR + dy, W, CONTENT_H);
+        }
+
+        // Cursor hovers over deductible, then moves to "Open your checklist"
+        let cx = 1100, cy = 480;
+        let cClick = 0;
+
+        if (t < 18.5) {
+          const m = easeInOutCubic(seg(t, 17.2, 18.2));
+          cx = 1100 + (1320 - 1100) * m;
+          cy = 480 + (515 - 480) * m; // Deductible area
+        } else if (t < 20.8) {
+          const m = easeInOutCubic(seg(t, 18.8, 20.4));
+          cx = 1320 + (550 - 1320) * m;
+          cy = 515 + (830 - 515) * m; // CTA button "Found the best home insurance..."
+        } else {
+          cx = 550; cy = 830;
+          cClick = seg(t, 20.8, 21.2);
+        }
+
+        drawCursor(ctx, cx, cy, 1.0, cClick);
       }
+
+      ctx.restore();
     }
 
-    ctx.restore();
+    // =========================================================================
+    // PHASE 4: Real MovePlan Dashboard & 260-piece Confetti (21.0s - 30.0s)
+    // =========================================================================
+    if (t >= 21.0) {
+      const p4Alpha = seg(t, 21.0, 21.6);
+      ctx.save();
+      ctx.globalAlpha = p4Alpha;
 
-    // bottom progress bar (product brand bar)
-    ctx.fillStyle = C.line;
-    ctx.fillRect(bx, by + bh - 6, bw, 6);
-    ctx.fillStyle = C.ifred;
-    ctx.fillRect(bx, by + bh - 6, bw * (t / 30), 6);
+      // Select plan state image based on tasks checked
+      let planImg = A["plan_4_done"];
+      if (t >= 27.2) planImg = A["06_plan_all_done"] || A["plan_all_done_confetti"];
+      else if (t >= 26.5) planImg = A["plan_7_done"];
+      else if (t >= 25.7) planImg = A["plan_6_done"];
+      else if (t >= 24.8) planImg = A["plan_5_done"];
 
-    // subtle vignette
-    const vg = ctx.createRadialGradient(W / 2, H / 2, 600, W / 2, H / 2, 1400);
-    vg.addColorStop(0, "rgba(0,0,0,0)");
-    vg.addColorStop(1, "rgba(120,80,40,0.10)");
-    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      if (planImg) {
+        ctx.drawImage(planImg, 0, H_BAR, W, CONTENT_H);
+      }
+
+      // Cursor clicks remaining tasks:
+      // Task 4 (elevator): x = 445, y = 852
+      let cx = 600, cy = 600;
+      let cClick = 0;
+
+      if (t < 24.2) {
+        const m = easeInOutCubic(seg(t, 22.2, 24.0));
+        cx = 900 + (445 - 900) * m;
+        cy = 500 + (852 - 500) * m;
+      } else if (t < 25.0) {
+        cx = 445; cy = 852;
+        cClick = seg(t, 24.6, 24.9);
+      } else if (t < 25.8) {
+        cx = 445; cy = 852;
+        cClick = seg(t, 25.5, 25.8);
+      } else if (t < 26.6) {
+        cx = 445; cy = 852;
+        cClick = seg(t, 26.3, 26.6);
+      } else if (t < 27.5) {
+        cx = 445; cy = 852;
+        cClick = seg(t, 27.0, 27.4);
+      } else {
+        // Move cursor gracefully away during confetti celebration
+        const m = easeOutCubic(seg(t, 27.5, 29.0));
+        cx = 445 + (1600 - 445) * m;
+        cy = 852 + (900 - 852) * m;
+      }
+
+      drawCursor(ctx, cx, cy, 1.0, cClick);
+
+      // Confetti Cannon Explosion (27.2s - 30.0s)
+      if (t >= 27.2) {
+        const confettiElapsed = t - 27.2;
+        drawConfetti(ctx, W, H, confettiElapsed);
+      }
+
+      ctx.restore();
+    }
+
+    // =========================================================================
+    // Dynamic Browser Chrome (Always crisp on top layer)
+    // =========================================================================
+    let currentUrl = "https://movescanner.fi";
+    if (t >= 21.3) {
+      currentUrl = "https://movescanner.fi/plan/s-helsinki-tampere";
+    } else if (t >= 6.0) {
+      currentUrl = "https://movescanner.fi/search?from=Helsinki&to=Tampere";
+    }
+    drawChrome(ctx, W, currentUrl);
   }
+
   window.SCENE = { draw, duration: 30 };
 })();

@@ -121,7 +121,7 @@ Skyscanner-level interaction polish, in this order of value:
 
 ## Working agreements
 
-- Verify like this, every phase: `npm run build` → restart `npx next start -p 4517` → probe with
+*124|- Verify like this, every phase: `npm run build` → restart `npx next start` (port 3000) → probe with
   puppeteer-core + headless Edge (`NODE_PATH=$(npm root -g) node probe.cjs`, delete probes after;
   see the runbook skill for recipes and stale-build traps) → `git commit` with a phase-prefixed message.
 - Keep the project + runbook skills updated when architecture or verification changes.

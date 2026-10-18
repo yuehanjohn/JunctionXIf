@@ -163,22 +163,89 @@ function helsinkiNowStamp(): string {
   return `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:00`;
 }
 
-/** Daily scores + hourly rows + best loading window per day, one API call. */
+/** Deterministic PRNG seeded per location so every render of a plan matches. */
+function mulberry32(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function round1(x: number): number {
+  return Math.round(x * 10) / 10;
+}
+
+/** Mock Finnish autumn forecast: no network, deterministic per lat/lon. */
+function mockForecast(lat: number, lon: number, days: number): {
+  daily: OpenMeteoDaily;
+  hourly: OpenMeteoHourly;
+} {
+  const dateStr = helsinkiNowStamp().slice(0, 10);
+  const start = new Date(`${dateStr}T00:00:00Z`);
+  const rand = mulberry32(Math.round(Math.abs(lat * 1000) + Math.abs(lon * 1000)));
+
+  const dailyTime: string[] = [];
+  const temperature_2m_max: number[] = [];
+  const temperature_2m_min: number[] = [];
+  const precipitation_sum: number[] = [];
+  const snowfall_sum: number[] = [];
+  const wind_gusts_10m_max: number[] = [];
+
+  const hourlyTime: string[] = [];
+  const temperature_2m: number[] = [];
+  const precipitation: number[] = [];
+  const snowfall: number[] = [];
+  const wind_gusts_10m: number[] = [];
+
+  for (let d = 0; d < days; d++) {
+    const dayDate = new Date(start);
+    dayDate.setUTCDate(dayDate.getUTCDate() + d);
+    const dateIso = dayDate.toISOString().slice(0, 10);
+    dailyTime.push(dateIso);
+
+    const baseTemp = 4 + rand() * 6;
+    const swing = 2 + rand() * 3;
+    const tMax = baseTemp + swing / 2;
+    const tMin = baseTemp - swing / 2;
+    const rainy = rand() < 0.4;
+    const precip = rainy ? rand() * 4 : rand() * 0.5;
+    const snow = tMax < 2 && rainy ? rand() * 3 : 0;
+    const gust = 12 + rand() * 22;
+
+    temperature_2m_max.push(round1(tMax));
+    temperature_2m_min.push(round1(tMin));
+    precipitation_sum.push(round1(precip));
+    snowfall_sum.push(round1(snow));
+    wind_gusts_10m_max.push(round1(gust));
+
+    for (let h = 8; h < 20; h++) {
+      const curve = Math.sin(((h - 8) / 12) * Math.PI);
+      const t = tMin + (tMax - tMin) * curve;
+      const hp = precip > 1 && rand() < 0.5 ? precip / 4 : 0;
+      const hs = snow > 0 && rand() < 0.4 ? snow / 4 : 0;
+      const hg = gust * (0.7 + rand() * 0.5);
+
+      hourlyTime.push(`${dateIso}T${String(h).padStart(2, "0")}:00`);
+      temperature_2m.push(round1(t));
+      precipitation.push(round1(hp));
+      snowfall.push(round1(hs));
+      wind_gusts_10m.push(round1(hg));
+    }
+  }
+
+  return {
+    daily: { time: dailyTime, temperature_2m_max, temperature_2m_min, precipitation_sum, snowfall_sum, wind_gusts_10m_max },
+    hourly: { time: hourlyTime, temperature_2m, precipitation, snowfall, wind_gusts_10m },
+  };
+}
+
+/** Daily scores + hourly rows + best loading window per day. Mock data only, no network. */
 export async function fetchWeatherBundle(lat: number, lon: number, days = 16): Promise<WeatherBundle> {
-  const url = new URL("https://api.open-meteo.com/v1/forecast");
-  url.searchParams.set("latitude", String(lat));
-  url.searchParams.set("longitude", String(lon));
-  url.searchParams.set("daily", "temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum,wind_gusts_10m_max");
-  url.searchParams.set("hourly", "temperature_2m,precipitation,snowfall,wind_gusts_10m");
-  url.searchParams.set("forecast_days", String(days));
-  url.searchParams.set("timezone", "Europe/Helsinki");
-
-  const res = await fetch(url, { next: { revalidate: 900 } });
-  if (!res.ok) throw new Error(`Weather service returned ${res.status}`);
-  const data = (await res.json()) as { daily?: OpenMeteoDaily; hourly?: OpenMeteoHourly };
-  if (!data.daily?.time) throw new Error("Weather service returned no daily data");
-
-  const hours = data.hourly?.time ? toWeatherHours(data.hourly) : [];
+  const { daily, hourly } = mockForecast(lat, lon, days);
+  const hours = toWeatherHours(hourly);
   // Windows never look backwards: at 15:00 the best window today starts now,
   // not at a dry morning that already happened.
   const upcoming = hours.filter((h) => h.time >= helsinkiNowStamp());

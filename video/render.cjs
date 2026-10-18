@@ -17,15 +17,38 @@ async function renderScene(browser, sceneName, durationSec) {
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 1 });
   await page.goto(htmlPath, { waitUntil: "load" });
 
-  // preload shared assets
-  const logoPath = path.join(ROOT, "build", "if-logo.png").replace(/\\/g, "/");
-  await page.evaluate(async (logoUrl) => {
+  // preload all product screens and shared assets as base64 data URLs
+  const screensDir = path.join(ROOT, "build", "product_screens");
+  const assetMap = {};
+  if (fs.existsSync(screensDir)) {
+    const files = fs.readdirSync(screensDir);
+    for (const file of files) {
+      if (file.endsWith(".png") || file.endsWith(".jpg")) {
+        const name = path.basename(file, path.extname(file));
+        const buf = fs.readFileSync(path.join(screensDir, file));
+        assetMap[name] = `data:image/png;base64,${buf.toString("base64")}`;
+      }
+    }
+  }
+  const logoPath = path.join(ROOT, "build", "if-logo.png");
+  if (fs.existsSync(logoPath)) {
+    const buf = fs.readFileSync(logoPath);
+    assetMap["logo"] = `data:image/png;base64,${buf.toString("base64")}`;
+  }
+
+  console.log(`Preloading ${Object.keys(assetMap).length} assets into template...`);
+  await page.evaluate(async (assets) => {
     window.ASSETS = {};
-    const img = new Image();
-    img.src = logoUrl;
-    await img.decode().catch(() => {});
-    window.ASSETS.logo = img.complete && img.naturalWidth > 0 ? img : null;
-  }, "file:///" + logoPath);
+    const promises = Object.entries(assets).map(([key, dataUrl]) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => { window.ASSETS[key] = img; resolve(); };
+        img.onerror = () => { window.ASSETS[key] = null; resolve(); };
+        img.src = dataUrl;
+      });
+    });
+    await Promise.all(promises);
+  }, assetMap);
 
   const sceneSrc = fs.readFileSync(path.join(ROOT, "scenes", sceneName + ".js"), "utf8");
   await page.evaluate(sceneSrc);
