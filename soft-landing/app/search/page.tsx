@@ -5,7 +5,7 @@ import type { WeatherDay } from "@/lib/types";
 import type { HomeSize } from "@/lib/pricing";
 import type { MoverService } from "@/lib/movers";
 
-// Search results depend on query params + live weather; render per request.
+// Search results depend on query params + scored weather; render per request.
 export const instant = false;
 
 const SERVICES: Record<MoverService, true> = {

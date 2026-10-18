@@ -21,7 +21,7 @@ import { fetchWeatherBundle, type WeatherBundle } from "@/lib/weather";
 import type { WeatherHour } from "@/lib/types";
 import { PlanTasks } from "./plan-tasks";
 
-// Reads the in-memory plan store + live weather per request.
+// Reads the plan store + scored weather per request.
 export const instant = false;
 
 const fmtHour = (hour: number) => `${String(hour).padStart(2, "0")}:00`;

@@ -251,7 +251,7 @@ export async function fetchWeatherBundle(lat: number, lon: number, days = 16): P
   const upcoming = hours.filter((h) => h.time >= helsinkiNowStamp());
   const windows = upcoming.length > 0 ? bestWindowsByDay(upcoming) : [];
   return {
-    days: toWeatherDays(data.daily).map((day) => ({
+    days: toWeatherDays(daily).map((day) => ({
       ...day,
       bestWindow: windows.find((w) => w.date === day.date) ?? null,
     })),
@@ -260,7 +260,7 @@ export async function fetchWeatherBundle(lat: number, lon: number, days = 16): P
   };
 }
 
-/** Live 16-day forecast scored for moving conditions. Server-side only. */
+/** Deterministic 16-day mock forecast scored for moving conditions. Server-side only. */
 export async function fetchWeatherDays(lat: number, lon: number, days = 16): Promise<WeatherDay[]> {
   return (await fetchWeatherBundle(lat, lon, days)).days;
 }

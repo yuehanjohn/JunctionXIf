@@ -252,8 +252,8 @@ export default function Home() {
 
       <footer className="border-t border-border">
         <div className="mx-auto w-full max-w-6xl px-6 py-6 text-xs text-text-muted">
-          Hackathon mockup. Operators, prices and statistics are illustrative; weather
-          data is live from Open-Meteo.
+          Hackathon mockup. Operators, prices, statistics and weather are illustrative
+          mock data.
         </div>
       </footer>
     </div>
