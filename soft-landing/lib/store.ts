@@ -1,7 +1,8 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ChecklistItem, MovePlan } from "./types";
+import type { Booking, ChecklistItem, MovePlan } from "./types";
+import { euro } from "./pricing";
 
 // Pages and route handlers compile to separate module instances in Next dev,
 // so a plain in-memory Map is not shared between them: a plan seeded during a
@@ -167,7 +168,43 @@ export function updatePlan(plan: MovePlan): MovePlan {
   return plan;
 }
 
-export type PatchOutcome = { ok: true; plan: MovePlan } | { ok: false; error: string };
+export type PatchOutcome = { ok: true; plan: MovePlan } | { ok: false, error: string };
+
+const BOOKING_ITEM_ID = "confirm-crew";
+
+/** The pre-move task a booking adds to the checklist. */
+export function bookingChecklistItem(booking: Booking): ChecklistItem {
+  return {
+    id: BOOKING_ITEM_ID,
+    title: `Confirm the crew with ${booking.moverName}`,
+    detail: `You held ${booking.moverName} at ${euro(booking.price)}. Confirm the arrival window, the moving-elevator slot and parking with them at least three days before the move.`,
+    dueOffsetDays: -3,
+    category: "official",
+    done: false,
+  };
+}
+
+/**
+ * Idempotent: re-holding the same crew at the same price changes nothing, so
+ * re-renders and double clicks can't duplicate checklist items.
+ */
+export function attachBooking(planId: string, booking: Booking): PatchOutcome {
+  const plan = getPlan(planId);
+  if (!plan) return { ok: false, error: "Plan not found" };
+  const b = plan.booking;
+  const same =
+    b &&
+    b.moverId === booking.moverId &&
+    b.price === booking.price &&
+    b.insuranceMonthly === booking.insuranceMonthly;
+  if (same) return { ok: true, plan };
+  plan.booking = booking;
+  if (!plan.checklist.some((item) => item.id === BOOKING_ITEM_ID)) {
+    plan.checklist = [...plan.checklist, bookingChecklistItem(booking)];
+  }
+  putPlan(plan);
+  return { ok: true, plan };
+}
 
 export function patchChecklistItem(id: string, itemId: string, done: boolean): PatchOutcome {
   const plan = getPlan(id);

@@ -58,6 +58,17 @@ export type ChecklistItem = {
   done: boolean;
 };
 
+/** A crew the visitor held in the comparison — carried into the moving plan. */
+export type Booking = {
+  moverId: string;
+  moverName: string;
+  /** Held total in €. */
+  price: number;
+  /** Personalised If home-insurance monthly premium at booking time. */
+  insuranceMonthly: number;
+  heldAt: string;
+};
+
 export type MovePlan = {
   id: string;
   fromName: string;
@@ -70,6 +81,6 @@ export type MovePlan = {
   homeSize: string;
   checklist: ChecklistItem[];
   createdAt: string;
-  /** Move date the one-click DVV + Posti filing was actually made for. */
-  addressChangeFiledFor?: string;
+  /** Set when the visitor held a crew from the search results. */
+  booking?: Booking;
 };

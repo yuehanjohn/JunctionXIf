@@ -11,9 +11,11 @@ import {
   Snowflake,
   Sparkles,
   TriangleAlert,
+  Truck,
   Wind,
 } from "lucide-react";
 import { Badge, Button, Card, CardTitle, cx } from "@/components/ui";
+import { CONTENTS_VALUE, euro, euroCents } from "@/lib/pricing";
 import { ensureSeededPlan, getPlan, type PlanSeed } from "@/lib/store";
 import { fetchWeatherBundle, type WeatherBundle } from "@/lib/weather";
 import type { WeatherHour } from "@/lib/types";
@@ -121,6 +123,25 @@ export default async function PlanPage({
     ) ?? [];
   const moveWindow = bundle?.windows.find((w) => w.date === plan.moveDate) ?? null;
 
+  // Booking context: contents value only resolves for canonical home sizes,
+  // so hand-typed or legacy plans fall back to the generic coverage card.
+  const bookingContents = plan.booking
+    ? ((CONTENTS_VALUE as Record<string, number | undefined>)[plan.homeSize] ?? null)
+    : null;
+  const bookingSearchHref =
+    plan.booking && bookingContents !== null
+      ? `/search?${new URLSearchParams({
+          fromName: plan.fromName,
+          fromLat: String(plan.fromLat),
+          fromLon: String(plan.fromLon),
+          toName: plan.toName,
+          toLat: String(plan.toLat),
+          toLon: String(plan.toLon),
+          date: plan.moveDate,
+          size: plan.homeSize,
+        })}`
+      : null;
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header>
@@ -146,6 +167,12 @@ export default async function PlanPage({
             <Home className="h-3.5 w-3.5" />
             {plan.homeSize}
           </Badge>
+          {plan.booking && (
+            <Badge tone="good">
+              <Truck className="h-3.5 w-3.5" />
+              Crew held · {plan.booking.moverName} · {euro(plan.booking.price)}
+            </Badge>
+          )}
         </div>
       </header>
 
@@ -312,36 +339,77 @@ export default async function PlanPage({
 
           <PlanTasks
             planId={plan.id}
-            moveDate={plan.moveDate}
             initialItems={plan.checklist}
           />
         </div>
 
         <aside className="space-y-6">
-          <Card className="p-6">
-            <div className="flex items-start gap-4">
-              <div className="mt-0.5 rounded-lg bg-accent/10 p-2.5">
-                <ShieldCheck className="h-5 w-5 text-accent" />
+          {plan.booking && bookingContents !== null ? (
+            <Card className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="mt-0.5 rounded-lg bg-accent/10 p-2.5">
+                  <ShieldCheck className="h-5 w-5 text-accent" />
+                </div>
+                <div>
+                  <CardTitle>Your crew and your cover</CardTitle>
+                  <p className="mt-1 text-sm leading-relaxed text-text-muted">
+                    <span className="font-medium text-foreground">{plan.booking.moverName}</span>{" "}
+                    is held at{" "}
+                    <span className="tnum font-medium text-foreground">{euro(plan.booking.price)}</span>{" "}
+                    for{" "}
+                    {formatDay(plan.moveDate, {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                    })}
+                    .
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-text-muted">
+                    Your ~{euro(bookingContents)} of contents are insured at both addresses on
+                    moving day — transit is included as standard, not an upsell. The cover
+                    then moves into the new home with you.
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-text-muted">
+                    If Home Insurance for the new home was quoted at{" "}
+                    <span className="tnum font-medium text-foreground">
+                      {euroCents(plan.booking.insuranceMonthly)}/mo
+                    </span>{" "}
+                    when you held the crew.{" "}
+                    {bookingSearchHref && (
+                      <Link href={bookingSearchHref} className="font-medium text-accent hover:underline">
+                        Adjust the quote
+                      </Link>
+                    )}
+                  </p>
+                </div>
               </div>
-              <div>
-                <CardTitle>Your things travel covered</CardTitle>
-                <p className="mt-1 text-sm leading-relaxed text-text-muted">
-                  On moving day your home insurance goes with you — boxes,
-                  furniture and the fragile things are covered while they travel
-                  between your old home and the new one.
-                </p>
-                <p className="mt-3 text-sm leading-relaxed text-text-muted">
-                  One habit prevents most of the damage:{" "}
-                  <span className="font-medium text-foreground">
-                    wrap fragile items in towels and blankets.
-                  </span>{" "}
-                  Roughly one in five movers reports something broken or missing —
-                  a soft layer around dishes and glassware is the simplest way to
-                  stay out of that group.
-                </p>
+            </Card>
+          ) : (
+            <Card className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="mt-0.5 rounded-lg bg-accent/10 p-2.5">
+                  <ShieldCheck className="h-5 w-5 text-accent" />
+                </div>
+                <div>
+                  <CardTitle>Your things travel covered</CardTitle>
+                  <p className="mt-1 text-sm leading-relaxed text-text-muted">
+                    On moving day your home insurance goes with you — boxes,
+                    furniture and the fragile things are covered while they travel
+                    between your old home and the new one.
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-text-muted">
+                    One habit prevents most of the damage:{" "}
+                    <span className="font-medium text-foreground">
+                      wrap fragile items in towels and blankets.
+                    </span>{" "}
+                    Roughly one in five movers reports something broken or missing —
+                    a soft layer around dishes and glassware is the simplest way to
+                    stay out of that group.
+                  </p>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          )}
         </aside>
       </div>
     </main>

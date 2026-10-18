@@ -18,7 +18,7 @@ const lora = Lora({
 });
 
 export const metadata: Metadata = {
-  title: "Soft Landing — compare house movers",
+  title: "MoveScanner — compare house movers",
   description:
     "Fixed-price moving quotes side by side, open line items, damage rates, and the best day to move — all in one search.",
 };
